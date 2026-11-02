@@ -1,36 +1,40 @@
-import type { Creature, Item, PlayerProfile, Task } from '../models'
+import type { CreatureDefinition, Interaction, Item, PlayerProfile, Task } from '../models'
 
 export const DEFAULT_PROFILES: PlayerProfile[] = [
   { id: 'player-1', name: 'Sternchen' },
   { id: 'player-2', name: 'Mondlicht' },
 ]
 
-export const CREATURES: Creature[] = [
+export const CREATURES: CreatureDefinition[] = [
   {
-    id: 'mika',
+    id: 'creature_01',
     name: 'Mika',
     species: 'Wolkenfuchs',
     assetId: 'creature-mika',
-    happiness: 80,
-    energy: 75,
+    price: 30,
   },
   {
-    id: 'lumi',
+    id: 'creature_02',
     name: 'Lumi',
     species: 'Sternendrache',
     assetId: 'creature-lumi',
-    happiness: 80,
-    energy: 75,
-  },
-  {
-    id: 'pippin',
-    name: 'Pippin',
-    species: 'Moosdrache',
-    assetId: 'creature-pippin',
-    happiness: 80,
-    energy: 75,
+    price: 30,
   },
 ]
+
+export const INTERACTIONS: Record<Interaction, {
+  xp: number
+  cooldownMs: number
+  energy: number
+  happiness: number
+  satiety: number
+}> = {
+  pet: { xp: 5, cooldownMs: 15_000, energy: 0, happiness: 8, satiety: 0 },
+  tap: { xp: 2, cooldownMs: 10_000, energy: 0, happiness: 2, satiety: 0 },
+  feed: { xp: 8, cooldownMs: 30_000, energy: 0, happiness: 3, satiety: 20 },
+  sleep: { xp: 6, cooldownMs: 60_000, energy: 25, happiness: 0, satiety: 0 },
+  play: { xp: 10, cooldownMs: 20_000, energy: -10, happiness: 15, satiety: -5 },
+}
 
 export const TASKS: Task[] = [
   {
