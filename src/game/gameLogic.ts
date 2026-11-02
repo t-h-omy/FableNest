@@ -1,5 +1,5 @@
-import { CREATURES, DEFAULT_PROFILES, SHOP_ITEMS, TASKS } from '../data/gameContent'
-import type { GameState, Item, ProfileId } from '../models'
+import { CREATURES, TASKS } from '../data/gameContent'
+import type { GameState, Item } from '../models'
 
 export const GAME_STATE_VERSION = 1
 
@@ -49,12 +49,4 @@ export function selectCreature(state: GameState, creatureId: string): GameState 
   const creature = CREATURES.find((entry) => entry.id === creatureId)
   if (!creature) return state
   return { ...state, creature: { ...creature } }
-}
-
-export function profileLabel(profileId: ProfileId): string {
-  return DEFAULT_PROFILES.find((profile) => profile.id === profileId)?.name ?? 'Profil'
-}
-
-export function itemById(itemId: string): Item | undefined {
-  return SHOP_ITEMS.find((item) => item.id === itemId)
 }

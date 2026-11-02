@@ -9,7 +9,7 @@ export interface Creature {
   id: string
   name: string
   species: string
-  color: string
+  assetId: string
   happiness: number
   energy: number
 }
@@ -25,7 +25,7 @@ export interface Item {
   description: string
   price: number
   category: 'decor' | 'care'
-  color: string
+  assetId: string
 }
 
 export interface Task {

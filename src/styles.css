@@ -271,6 +271,12 @@ h2 {
   overflow: visible;
 }
 
+.pixi-canvas-host {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
 .creature-fallback {
   width: 134px;
   height: 118px;

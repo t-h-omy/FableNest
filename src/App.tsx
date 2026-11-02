@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { PixiCreature } from './components/PixiCreature'
+import { placeholderColor } from './assets/registry'
 import { CREATURES, DEFAULT_PROFILES, SHOP_ITEMS, TASKS } from './data/gameContent'
 import { completeTask, purchaseItem, selectCreature } from './game/gameLogic'
 import { ensureProfiles, loadGameState, openGameDatabase, saveGameState } from './storage/database'
@@ -28,6 +29,10 @@ export default function App() {
     let active = true
     void openGameDatabase()
       .then(async (openedDatabase) => {
+        if (!active) {
+          openedDatabase.close()
+          return
+        }
         database.current = openedDatabase
         const storedProfiles = await ensureProfiles(openedDatabase)
         if (active) {
@@ -120,8 +125,19 @@ export default function App() {
     )
   }
 
-  if (loading || !gameState) {
+  if (loading) {
     return <main className="loading-screen" aria-live="polite">Dein Spielzimmer wird geöffnet …</main>
+  }
+
+  if (!gameState) {
+    return (
+      <main className="loading-screen">
+        <p className="error-message" role="alert">{error || 'Der Spielstand ist nicht verfügbar.'}</p>
+        <button className="button-primary" onClick={() => { setProfileId(null); setError('') }}>
+          Profil wechseln
+        </button>
+      </main>
+    )
   }
 
   const activeProfile = profiles.find((profile) => profile.id === profileId)
@@ -138,7 +154,7 @@ export default function App() {
           <span className="coin-badge" aria-label={`${gameState.coins} Sternentaler`}>
             <span aria-hidden="true">✦</span> {gameState.coins}
           </span>
-          <button className="profile-switch" onClick={() => { setProfileId(null); setGameState(null) }}>
+          <button className="profile-switch" onClick={() => { setProfileId(null); setGameState(null); setView('room') }}>
             <span className="profile-dot" aria-hidden="true" />
             <span>{activeProfile?.name ?? 'Profil'}</span>
             <span className="switch-label"> wechseln</span>
@@ -176,7 +192,7 @@ export default function App() {
                 <span className="sky-star star-two">✧</span>
                 <span className="sky-star star-three">✦</span>
               </div>
-              <PixiCreature color={creature.color} name={creature.name} />
+              <PixiCreature assetId={creature.assetId} name={creature.name} species={creature.species} />
               <div className="creature-caption">
                 <span className="creature-species">{creature.species}</span>
                 <h2>{creature.name}</h2>
@@ -259,7 +275,7 @@ export default function App() {
                 const canAfford = gameState.coins >= item.price
                 return (
                   <article className="content-card shop-card" key={item.id}>
-                    <div className="item-art" style={{ '--item-color': item.color } as CSSProperties} aria-hidden="true">
+                    <div className="item-art" style={{ '--item-color': placeholderColor(item.assetId) } as CSSProperties} aria-hidden="true">
                       <span>{item.category === 'care' ? '✿' : '✦'}</span>
                     </div>
                     <div className="shop-copy">
@@ -298,7 +314,7 @@ export default function App() {
                 const selected = creature.id === entry.id
                 return (
                   <article className={`content-card creature-card${selected ? ' selected' : ''}`} key={entry.id}>
-                    <div className="collection-creature" style={{ '--creature-color': entry.color } as CSSProperties} aria-hidden="true">
+                    <div className="collection-creature" style={{ '--creature-color': placeholderColor(entry.assetId) } as CSSProperties} aria-hidden="true">
                       <span />
                     </div>
                     <div>

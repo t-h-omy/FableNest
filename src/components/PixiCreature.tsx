@@ -1,13 +1,14 @@
 import { Application, Container, Graphics } from 'pixi.js'
 import { useEffect, useRef, useState } from 'react'
-import { ASSETS } from '../assets/registry'
+import { ASSETS, placeholderColor } from '../assets/registry'
 
 interface PixiCreatureProps {
-  color: string
+  assetId: string
   name: string
+  species: string
 }
 
-export function PixiCreature({ color, name }: PixiCreatureProps) {
+export function PixiCreature({ assetId, name, species }: PixiCreatureProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [unavailable, setUnavailable] = useState(false)
 
@@ -35,7 +36,15 @@ export function PixiCreature({ color, name }: PixiCreatureProps) {
         initialized = true
         app.canvas.setAttribute('aria-hidden', 'true')
         app.canvas.className = 'pixi-canvas'
-        hostRef.current.replaceChildren(app.canvas)
+        hostRef.current.appendChild(app.canvas)
+
+        const asset = ASSETS[assetId]
+        if (!asset || asset.kind !== 'creature' || asset.source.type !== 'generated') {
+          setUnavailable(true)
+          app.destroy(true)
+          initialized = false
+          return
+        }
 
         const creature = new Container()
         creature.x = app.screen.width / 2
@@ -44,15 +53,15 @@ export function PixiCreature({ color, name }: PixiCreatureProps) {
 
         const body = new Graphics()
           .ellipse(0, 12, 72, 60)
-          .fill(color)
+          .fill(asset.source.color)
           .stroke({ color: '#9e477d', width: 3 })
         const leftEar = new Graphics()
           .ellipse(-48, -34, 24, 37)
-          .fill(color)
+          .fill(asset.source.color)
           .stroke({ color: '#9e477d', width: 3 })
         const rightEar = new Graphics()
           .ellipse(48, -34, 24, 37)
-          .fill(color)
+          .fill(asset.source.color)
           .stroke({ color: '#9e477d', width: 3 })
         const face = new Graphics()
           .circle(-24, 7, 4)
@@ -63,7 +72,7 @@ export function PixiCreature({ color, name }: PixiCreatureProps) {
           .stroke({ color: '#9e477d', width: 3 })
         const sparkle = new Graphics()
           .star(0, 0, 4, 8, 4)
-          .fill(ASSETS.decor.color)
+          .fill(placeholderColor('decor-cushion'))
         sparkle.x = 81
         sparkle.y = -60
 
@@ -73,7 +82,10 @@ export function PixiCreature({ color, name }: PixiCreatureProps) {
         })
       } catch {
         if (!disposed) setUnavailable(true)
-        if (initialized) app.destroy(true)
+        if (initialized) {
+          initialized = false
+          app.destroy(true)
+        }
       }
     }
 
@@ -82,11 +94,12 @@ export function PixiCreature({ color, name }: PixiCreatureProps) {
       disposed = true
       if (initialized) app.destroy(true)
     }
-  }, [color])
+  }, [assetId])
 
   return (
-    <div className="creature-stage" ref={hostRef} aria-label={`${name}, dein ${name === 'Mika' ? 'Wolkenfuchs' : 'Fantasiewesen'}`}>
-      {unavailable && <div className="creature-fallback" style={{ backgroundColor: color }} aria-hidden="true" />}
+    <div className="creature-stage" aria-label={`${name}, dein ${species}`}>
+      <div className="pixi-canvas-host" ref={hostRef} aria-hidden="true" />
+      {unavailable && <div className="creature-fallback" style={{ backgroundColor: placeholderColor(assetId) }} aria-hidden="true" />}
       <span className="visually-hidden">{name} ist im Spielzimmer.</span>
     </div>
   )
