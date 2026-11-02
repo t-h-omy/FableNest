@@ -17,9 +17,27 @@ npm run dev
 The app is served locally by Vite. Select either profile to enter its game.
 
 Each profile first chooses `creature_01` (Mika) or `creature_02` (Lumi) for free.
-The other friend costs 30 stars in the shop. Acquired friends can be
-renamed (1–24 characters) and switched in the room or collection without losing
-their individual progress.
+The other friend is the shop product "Zweites Wesen" (20 stars). Acquired friends
+can be renamed (1–24 characters) and activated in the room or collection without
+losing their individual progress; exactly one friend is always active.
+
+## Shop, collection and housing
+
+- `src/data/shop.ts` holds the typed shop products (decoration 5, play ball 10,
+  second creature 20 stars) and the three room placement slots. Products are
+  one-time purchases tracked in the profile's `ownedItemIds` (inventory belongs
+  to the profile, not to a creature).
+- `src/game/shop.ts` contains the pure purchase/placement rules; purchases and
+  placements are validated and saved atomically through `mutateGameState`.
+- Each profile has one shared room (`house.placements`: slot → product). Tap an
+  item in the inventory, then a slot, to place or move it; tap an occupied slot
+  to pick it up. Switching creatures never changes the room. Tapping the play
+  ball triggers the active creature's play action.
+- Object graphics are pink generated placeholders with distinct shapes and
+  labels, resolved through `src/assets/registry.ts` (`image` sources replace the
+  placeholder without logic changes).
+- Save schema version 4: v3 and older saves are migrated; previous shop items
+  are refunded as stars.
 
 ## Build and test
 
@@ -32,8 +50,8 @@ npm test
 
 ## Architecture
 
-- `src/models.ts` defines the shared profile, creature, house, item, task, and save-state types.
-- `src/data/` contains the data-driven creatures, tasks, and shop catalog.
+- `src/models.ts` defines the shared profile, creature, house, shop product, task, and save-state types.
+- `src/data/` contains the data-driven creatures, tasks, shop products, and placement slots.
 - `src/game/` holds game rules independently from React and PixiJS.
 - `src/storage/` stores profiles and schema-versioned saves in IndexedDB using `idb`.
 - `src/assets/` is the central registry for procedural placeholder assets. The game-room creature is drawn at runtime with PixiJS; no external game art is loaded.

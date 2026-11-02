@@ -14,7 +14,6 @@ export interface CreatureDefinition {
   name: string
   species: string
   assetId: string
-  price: number
 }
 
 export interface Creature {
@@ -30,18 +29,30 @@ export interface Creature {
   lastXpAt: Partial<Record<Interaction, number>>
 }
 
+export type SlotId = 'floor-left' | 'floor-right' | 'wall-shelf'
+
 export interface House {
   level: number
-  decorItemIds: string[]
+  placements: Partial<Record<SlotId, string>>
 }
 
-export interface Item {
+export type ProductKind = 'decor' | 'toy' | 'creature'
+
+export interface ShopProduct {
   id: string
+  kind: ProductKind
   name: string
   description: string
   price: number
-  category: 'decor' | 'care'
   assetId: string
+  interaction?: Interaction
+}
+
+export interface PlacementSlot {
+  id: SlotId
+  label: string
+  x: number
+  y: number
 }
 
 export interface Task {

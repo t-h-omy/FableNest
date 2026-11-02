@@ -1,30 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { CREATURES, INTERACTIONS, SHOP_ITEMS } from '../src/data/gameContent'
+import { CREATURES, INTERACTIONS } from '../src/data/gameContent'
 import type { Interaction } from '../src/models'
 import {
   createInitialGameState,
-  purchaseItem,
-  purchaseCreature,
   renameCreature,
   interact,
   MAX_LEVEL,
   XP_PER_LEVEL,
   selectCreature,
 } from '../src/game/gameLogic'
+import { purchaseProduct } from '../src/game/shop'
 
 describe('game rules', () => {
-  it('purchases an affordable item and rejects unaffordable or duplicate purchases', () => {
-    const initial = { ...createInitialGameState(), coins: 20 }
-    const item = SHOP_ITEMS[0]
-    const purchased = purchaseItem(initial, item)
-
-    expect(purchased.coins).toBe(initial.coins - item.price)
-    expect(purchased.house.decorItemIds).toContain(item.id)
-    expect(purchaseItem(purchased, item)).toBe(purchased)
-    const broke = { ...initial, coins: 0 }
-    expect(purchaseItem(broke, item)).toBe(broke)
-  })
-
   it('chooses a free starter once and only switches to acquired creatures', () => {
     const firstProfile = createInitialGameState()
     const secondProfile = createInitialGameState()
@@ -41,13 +28,13 @@ describe('game rules', () => {
   it('purchases the second creature once without resetting either friend', () => {
     const starter = createInitialGameState('creature_01')
     const initial = { ...interact(starter, 'pet', 100), coins: 50 }
-    const purchased = purchaseCreature(initial, 'creature_02')
-    expect(purchased.coins).toBe(20)
+    const purchased = purchaseProduct(initial, 'second-creature')
+    expect(purchased.coins).toBe(30)
     expect(purchased.creatures[0]).toEqual(initial.creatures[0])
     expect(purchased.creatures[1].xp).toBe(0)
-    expect(purchaseCreature(purchased, 'creature_02')).toBe(purchased)
-    expect(purchaseCreature(starter, 'creature_02')).toBe(starter)
-    expect(purchaseCreature(createInitialGameState(), 'creature_02').creatures).toEqual([])
+    expect(purchaseProduct(purchased, 'second-creature')).toBe(purchased)
+    expect(purchaseProduct(starter, 'second-creature')).toBe(starter)
+    expect(purchaseProduct({ ...createInitialGameState(), coins: 50 }, 'second-creature').creatures).toEqual([])
     const switched = selectCreature(purchased, 'creature_02')
     const named = renameCreature(interact(switched, 'feed', 100), 'creature_02', '  Nova  ')
     expect(named.creatures[1].name).toBe('Nova')
@@ -69,7 +56,7 @@ describe('game rules', () => {
     expect(state.creatures[0].xp).toBe(10)
     state = interact(state, 'feed', 15_000)
     expect(state.creatures[0].xp).toBe(18)
-    const second = selectCreature(purchaseCreature({ ...state, coins: 50 }, 'creature_02'), 'creature_02')
+    const second = selectCreature(purchaseProduct({ ...state, coins: 50 }, 'second-creature'), 'creature_02')
     expect(interact(second, 'pet', 15_000).creatures[1].xp).toBe(5)
     expect(interact(state, 'pet', 1).creatures[0].xp).toBe(18)
   })

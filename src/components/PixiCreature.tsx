@@ -2,7 +2,17 @@ import { Application, Graphics, type FederatedPointerEvent } from 'pixi.js'
 import { useEffect, useRef, useState } from 'react'
 import { placeholderColor } from '../assets/registry'
 import { CreatureRenderer } from '../rendering/CreatureRenderer'
+import { ObjectRenderer } from '../rendering/ObjectRenderer'
 import type { AnimationState, Interaction } from '../models'
+
+export interface RoomObject {
+  productId: string
+  assetId: string
+  label: string
+  x: number
+  y: number
+  interactive: boolean
+}
 
 interface PixiCreatureProps {
   assetId: string
@@ -10,7 +20,8 @@ interface PixiCreatureProps {
   species: string
   animation: AnimationState
   animationKey: number
-  decorAssetIds: string[]
+  objects: RoomObject[]
+  onObjectTap: (productId: string) => void
   onInteract: (action: Interaction) => void
 }
 
@@ -20,6 +31,7 @@ export function PixiCreature(props: PixiCreatureProps) {
   const latest = useRef(props)
   latest.current = props
   const [unavailable, setUnavailable] = useState(false)
+  const objectsKey = props.objects.map((entry) => `${entry.productId}@${entry.x},${entry.y}`).join(';')
 
   useEffect(() => {
     let disposed = false
@@ -50,12 +62,17 @@ export function PixiCreature(props: PixiCreatureProps) {
           .roundRect(50, 40, 100, 110, 12).fill('#fff0f8')
           .ellipse(320, 320, 110, 20).fill('#df97bc')
         app.stage.addChild(room)
-        latest.current.decorAssetIds.forEach((id, index) => {
-          const decor = new Graphics()
-            .roundRect(0, 0, 65, 50, 15).fill(placeholderColor(id))
-            .stroke({ color: '#9e477d', width: 3 })
-          decor.position.set(55 + index * 480, 295)
-          app.stage.addChild(decor)
+        latest.current.objects.forEach((entry) => {
+          const object = new ObjectRenderer(entry.assetId, entry.label, entry.interactive)
+          object.position.set(entry.x, entry.y)
+          if (entry.interactive) {
+            object.on('pointertap', () => {
+              object.bounce()
+              latest.current.onObjectTap(entry.productId)
+            })
+          }
+          app.stage.addChild(object)
+          void object.load()
         })
 
         const creature = new CreatureRenderer(props.assetId)
@@ -111,7 +128,7 @@ export function PixiCreature(props: PixiCreatureProps) {
       rendererRef.current = null
       if (initialized) app.destroy(true, { children: true })
     }
-  }, [props.assetId, props.decorAssetIds.join(',')])
+  }, [props.assetId, objectsKey])
 
   useEffect(() => {
     rendererRef.current?.setAnimation(props.animation)

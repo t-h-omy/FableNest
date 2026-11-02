@@ -154,7 +154,10 @@ describe('persistent parent approval', () => {
     const database = await openGameDatabase(name)
     try {
       const migrated = await loadGameState(database, 'player-1')
-      expect(migrated).toEqual({ ...oldState, schemaVersion: GAME_STATE_VERSION, taskRequests: [], starBookings: [] })
+      expect(migrated).toEqual({
+        ...oldState, schemaVersion: GAME_STATE_VERSION, house: { level: 1, placements: {} },
+        taskRequests: [], starBookings: [],
+      })
       expect(await hasParentPin(database)).toBe(false)
       await setParentPin(database, '1234')
       const future = { ...migrated, schemaVersion: GAME_STATE_VERSION + 1 }

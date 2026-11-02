@@ -1,7 +1,7 @@
 import { CREATURES, INTERACTIONS } from '../data/gameContent'
-import type { Creature, CreatureDefinition, GameState, Interaction, Item } from '../models'
+import type { Creature, CreatureDefinition, GameState, Interaction } from '../models'
 
-export const GAME_STATE_VERSION = 3
+export const GAME_STATE_VERSION = 4
 export const MAX_LEVEL = 20
 export const XP_PER_LEVEL = 100
 
@@ -21,30 +21,11 @@ export function createInitialGameState(creatureId?: string): GameState {
     coins: 0,
     creatures: definition ? [createCreature(definition)] : [],
     activeCreatureId: definition?.id ?? null,
-    house: { level: 1, decorItemIds: [] },
+    house: { level: 1, placements: {} },
     ownedItemIds: [],
     completedTaskIds: [],
     taskRequests: [],
     starBookings: [],
-  }
-}
-
-export function purchaseItem(state: GameState, item: Item): GameState {
-  if (!Number.isSafeInteger(item.price) || item.price < 0 ||
-    state.ownedItemIds.includes(item.id) || state.coins < item.price) return state
-
-  const isDecoration = item.category === 'decor'
-  return {
-    ...state,
-    coins: state.coins - item.price,
-    ownedItemIds: [...state.ownedItemIds, item.id],
-    house: isDecoration
-      ? { ...state.house, decorItemIds: [...state.house.decorItemIds, item.id] }
-      : state.house,
-    creatures: state.creatures.map((creature) =>
-      item.category === 'care' && creature.id === state.activeCreatureId
-        ? { ...creature, energy: Math.min(100, creature.energy + 20) }
-        : creature),
   }
 }
 
@@ -56,16 +37,6 @@ export function selectCreature(state: GameState, creatureId: string): GameState 
   }
   if (!state.creatures.some((creature) => creature.id === creatureId)) return state
   return { ...state, activeCreatureId: definition.id }
-}
-
-export function purchaseCreature(state: GameState, creatureId: string): GameState {
-  const definition = CREATURES.find((entry) => entry.id === creatureId)
-  if (!definition || !state.creatures.length || state.coins < definition.price ||
-    state.creatures.some((creature) => creature.id === creatureId)) return state
-  return {
-    ...state, coins: state.coins - definition.price,
-    creatures: [...state.creatures, createCreature(definition)],
-  }
 }
 
 export function renameCreature(state: GameState, creatureId: string, name: string): GameState {

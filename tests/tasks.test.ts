@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { TASKS } from '../src/data/gameContent'
-import { createInitialGameState, interact, purchaseItem } from '../src/game/gameLogic'
+import { createInitialGameState, interact } from '../src/game/gameLogic'
 import { approveTask, calendarDate, requestTask, taskStatus } from '../src/game/tasks'
-import { SHOP_ITEMS } from '../src/data/gameContent'
+import { purchaseProduct } from '../src/game/shop'
 
 const day = new Date(2026, 10, 2, 12)
 const tomorrow = new Date(2026, 10, 3, 0)
@@ -71,10 +71,9 @@ describe('household tasks and stars', () => {
     expect(second.starBookings).toEqual([])
     const cared = interact(first, 'pet', 0)
     expect(cared.coins).toBe(14)
-    const bought = purchaseItem(cared, SHOP_ITEMS[0])
-    expect(bought.coins).toBe(2)
+    const bought = purchaseProduct(cared, 'play-ball')
+    expect(bought.coins).toBe(4)
     expect(bought.starBookings).toEqual(first.starBookings)
-    expect(purchaseItem(bought, SHOP_ITEMS[1])).toBe(bought)
-    expect(purchaseItem(bought, { ...SHOP_ITEMS[1], price: -10 })).toBe(bought)
+    expect(purchaseProduct(bought, 'second-creature')).toBe(bought)
   })
 })
