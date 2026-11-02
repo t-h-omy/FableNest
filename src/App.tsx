@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { PixiCreature } from './components/PixiCreature'
+import { PixiCreature, type RoomObject } from './components/PixiCreature'
 import { ParentPinDialog } from './components/ParentPinDialog'
 import { placeholderColor } from './assets/registry'
-import { CREATURES, DEFAULT_PROFILES, SHOP_ITEMS, TASKS } from './data/gameContent'
-import { interact, purchaseCreature, purchaseItem, renameCreature, selectCreature, XP_PER_LEVEL } from './game/gameLogic'
+import { CREATURES, DEFAULT_PROFILES, TASKS } from './data/gameContent'
+import { findProduct, PLACEMENT_SLOTS, SHOP_PRODUCTS } from './data/shop'
+import { interact, renameCreature, selectCreature, XP_PER_LEVEL } from './game/gameLogic'
+import { checkPurchase, isPlaceable, placeItem, purchaseProduct, removeItem } from './game/shop'
 import { calendarDate, requestTask, taskStatus } from './game/tasks'
 import { confirmTask, ensureProfiles, loadGameState, mutateGameState, openGameDatabase } from './storage/database'
-import type { AnimationState, GameState, Interaction, PlayerProfile, ProfileId } from './models'
+import type { AnimationState, GameState, Interaction, PlayerProfile, ProfileId, SlotId } from './models'
 import type { CSSProperties } from 'react'
 
 type View = 'room' | 'tasks' | 'shop' | 'collection'
@@ -34,6 +36,7 @@ export default function App() {
   const [pinDialog, setPinDialog] = useState<{ taskId: string; date: string } | 'change' | null>(null)
   const [today, setToday] = useState(() => calendarDate())
   const [saving, setSaving] = useState(false)
+  const [held, setHeld] = useState<string | null>(null)
   const savingRef = useRef(false)
 
   useEffect(() => {
@@ -114,6 +117,16 @@ export default function App() {
     }
   }, [profileId])
 
+  const placeableOwned = SHOP_PRODUCTS.filter((product) =>
+    isPlaceable(product) && gameState?.ownedItemIds.includes(product.id))
+  const roomObjects: RoomObject[] = PLACEMENT_SLOTS.flatMap((slot) => {
+    const product = findProduct(gameState?.house.placements[slot.id] ?? '')
+    return product ? [{
+      productId: product.id, assetId: product.assetId, label: product.name,
+      x: slot.x, y: slot.y, interactive: Boolean(product.interaction),
+    }] : []
+  })
+
   async function updateGameState(change: (state: GameState) => GameState) {
     if (!profileId || !database.current || savingRef.current) return
     savingRef.current = true
@@ -133,6 +146,25 @@ export default function App() {
       savingRef.current = false
       setSaving(false)
     }
+  }
+
+  function tapSlot(slotId: SlotId) {
+    const state = stateRef.current
+    if (!state) return
+    const placed = state.house.placements[slotId]
+    if (held && state.ownedItemIds.includes(held)) {
+      const productId = held
+      setHeld(null)
+      void updateGameState((current) => placeItem(current, slotId, productId))
+    } else if (placed) {
+      setHeld(placed)
+      void updateGameState((current) => removeItem(current, slotId))
+    }
+  }
+
+  function tapObject(productId: string) {
+    const interaction = findProduct(productId)?.interaction
+    if (interaction) handleInteraction(interaction)
   }
 
   function handleInteraction(action: Interaction) {
@@ -289,7 +321,8 @@ export default function App() {
               <PixiCreature
                 assetId={creature.assetId} name={creature.name} species={creature.species}
                 animation={reaction.state} animationKey={reaction.key}
-                decorAssetIds={SHOP_ITEMS.filter((item) => gameState.house.decorItemIds.includes(item.id)).map((item) => item.assetId)}
+                objects={roomObjects}
+                onObjectTap={tapObject}
                 onInteract={handleInteraction}
               />
               <div className="creature-caption">
@@ -338,11 +371,41 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <p className="room-decor">
-                {gameState.house.decorItemIds.length
-                  ? `Dein Nest hat ${gameState.house.decorItemIds.length} ${gameState.house.decorItemIds.length === 1 ? 'Schatz' : 'Schätze'}.`
-                  : 'Dein Nest wartet auf deine eigene Deko.'}
-              </p>
+              <div className="housing-panel">
+                <h2>Einrichtung</h2>
+                <p>
+                  {held
+                    ? `${findProduct(held)?.name} ausgewählt. Tippe auf einen Platz, um es dort hinzustellen.`
+                    : 'Wähle einen Gegenstand und tippe dann auf einen Platz. Tippe auf einen belegten Platz, um den Gegenstand aufzuheben.'}
+                </p>
+                <div className="inventory-row">
+                  {placeableOwned.length === 0 && <p>Im Shop findest du Dinge für dein Zimmer.</p>}
+                  {placeableOwned.map((product) => (
+                    <button key={product.id} className={held === product.id ? 'button-primary' : 'button-secondary'}
+                      aria-pressed={held === product.id}
+                      onClick={() => setHeld(held === product.id ? null : product.id)}>
+                      {product.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="slot-grid">
+                  {PLACEMENT_SLOTS.map((slot) => {
+                    const placed = findProduct(gameState.house.placements[slot.id] ?? '')
+                    return (
+                      <button key={slot.id} className={`slot-button${placed ? ' filled' : ''}`}
+                        disabled={!held && !placed} onClick={() => tapSlot(slot.id)}>
+                        <span className="item-category">{slot.label}</span>
+                        <strong>{placed?.name ?? 'Frei'}</strong>
+                      </button>
+                    )
+                  })}
+                </div>
+                {roomObjects.filter((entry) => entry.interactive).map((entry) => (
+                  <button key={entry.productId} className="button-secondary" onClick={() => tapObject(entry.productId)}>
+                    {entry.label} anstupsen
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
         )}
@@ -414,45 +477,28 @@ export default function App() {
             </div>
             {!creature && <p>Wähle zuerst im Spielzimmer dein kostenloses Startwesen. Danach kannst du hier einkaufen.</p>}
             <div className="shop-grid">
-              {CREATURES.map((entry) => {
-                const owned = gameState.creatures.some((friend) => friend.id === entry.id)
+              {SHOP_PRODUCTS.map((product) => {
+                const check = checkPurchase(gameState, product)
+                const owned = !check.ok && (check.reason === 'owned' || check.reason === 'no-creature')
                 return (
-                  <article className="content-card shop-card" key={entry.id}>
-                    <div className="collection-creature" style={{ '--creature-color': placeholderColor(entry.assetId) } as CSSProperties} aria-hidden="true"><span /></div>
-                    <div className="shop-copy">
-                      <h2>{entry.name}</h2>
-                      <p>{entry.species} · Ein neuer Freund mit eigenen Werten.</p>
-                      <div className="shop-buy-row">
-                        <span className="reward">✦ {entry.price}</span>
-                        <button className="button-primary" disabled={!creature || owned || gameState.coins < entry.price}
-                          onClick={() => void updateGameState((state) => purchaseCreature(state, entry.id))}>
-                          {owned ? 'Schon bei dir' : gameState.coins < entry.price ? 'Zu teuer' : 'Wesen kaufen'}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
-              {SHOP_ITEMS.map((item) => {
-                const owned = gameState.ownedItemIds.includes(item.id)
-                const canAfford = gameState.coins >= item.price
-                return (
-                  <article className="content-card shop-card" key={item.id}>
-                    <div className="item-art" style={{ '--item-color': placeholderColor(item.assetId) } as CSSProperties} aria-hidden="true">
-                      <span>{item.category === 'care' ? '✿' : '✦'}</span>
+                  <article className="content-card shop-card" key={product.id}>
+                    <div className="item-art" style={{ '--item-color': placeholderColor(product.assetId) } as CSSProperties} aria-hidden="true">
+                      <span>{product.kind === 'creature' ? '♥' : product.kind === 'toy' ? '●' : '✦'}</span>
                     </div>
                     <div className="shop-copy">
-                      <span className="item-category">{item.category === 'care' ? 'Für dein Wesen' : 'Für dein Nest'}</span>
-                      <h2>{item.name}</h2>
-                      <p>{item.description}</p>
+                      <span className="item-category">
+                        {product.kind === 'creature' ? 'Neuer Freund' : product.kind === 'toy' ? 'Zum Spielen' : 'Für dein Zimmer'}
+                      </span>
+                      <h2>{product.name}</h2>
+                      <p>{product.description}</p>
                       <div className="shop-buy-row">
-                        <span className="reward">✦ {item.price}</span>
+                        <span className="reward">✦ {product.price}</span>
                         <button
                           className={owned ? 'button-secondary' : 'button-primary'}
-                          disabled={!creature || owned || !canAfford}
-                          onClick={() => void updateGameState((state) => purchaseItem(state, item))}
+                          disabled={!check.ok}
+                          onClick={() => void updateGameState((state) => purchaseProduct(state, product.id))}
                         >
-                          {owned ? 'Gekauft' : canAfford ? 'Kaufen' : 'Zu teuer'}
+                          {owned ? 'Gekauft' : check.ok ? 'Kaufen' : check.reason === 'poor' ? 'Zu wenig Sterne' : 'Wähle zuerst ein Wesen'}
                         </button>
                       </div>
                     </div>
@@ -484,15 +530,16 @@ export default function App() {
                     <div>
                       <span className="item-category">{entry.species}</span>
                       <h2>{owned?.name ?? entry.name}</h2>
-                      <p>{owned ? `Level ${owned.level} · ${owned.xp} XP` : 'Gesperrt · Im Shop erhältlich'}</p>
+                      <p>{owned ? `Level ${owned.level} · ${owned.xp} XP` : 'Gesperrt · Im Shop für 20 Sterne erhältlich'}</p>
                     </div>
                     <button
                       className={selected ? 'button-secondary' : 'button-primary'}
                       disabled={selected || !owned}
                       onClick={() => void updateGameState((state) => selectCreature(state, entry.id))}
                     >
-                      {selected ? 'Im Spielzimmer' : owned ? 'Auswählen' : 'Gesperrt'}
+                      {selected ? 'Im Spielzimmer' : owned ? 'Aktivieren' : 'Gesperrt'}
                     </button>
+                    {!owned && <button className="button-secondary" onClick={() => setView('shop')}>Zum Shop</button>}
                   </article>
                 )
               })}

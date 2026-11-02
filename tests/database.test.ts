@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { deleteDB } from 'idb'
 import { ensureProfiles, loadGameState, openGameDatabase, saveGameState } from '../src/storage/database'
 import { DEFAULT_PROFILES } from '../src/data/gameContent'
-import { createInitialGameState, GAME_STATE_VERSION, interact, purchaseCreature, renameCreature, selectCreature } from '../src/game/gameLogic'
+import { purchaseProduct } from '../src/game/shop'
+import { createInitialGameState, GAME_STATE_VERSION, interact, renameCreature, selectCreature } from '../src/game/gameLogic'
 
 const databaseNames: string[] = []
 
@@ -67,8 +68,9 @@ describe('local profile storage', () => {
     }, 'player-1')
     const migrated = await loadGameState(database, 'player-1')
     expect(migrated.schemaVersion).toBe(GAME_STATE_VERSION)
-    expect(migrated.coins).toBe(42)
-    expect(migrated.house.decorItemIds).toEqual(['pink-cushion'])
+    expect(migrated.coins).toBe(54)
+    expect(migrated.ownedItemIds).toEqual([])
+    expect(migrated.house.placements).toEqual({})
     expect(migrated.completedTaskIds).toEqual(['read-book'])
     expect(migrated.creatures).toHaveLength(1)
     expect(migrated.creatures[0]).toMatchObject({
@@ -83,7 +85,7 @@ describe('local profile storage', () => {
     databaseNames.push(name)
     const database = await openGameDatabase(name)
     const initial = { ...createInitialGameState('creature_02'), coins: 50 }
-    const acquired = purchaseCreature(initial, 'creature_01')
+    const acquired = purchaseProduct(initial, 'second-creature')
     const named = renameCreature(acquired, 'creature_01', 'Stern')
     let state = selectCreature(named, 'creature_01')
     for (let time = 0; time < 300_000; time += 15_000) state = interact(state, 'pet', time)

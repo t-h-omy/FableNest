@@ -1,4 +1,4 @@
-import type { CreatureDefinition, Interaction, Item, PlayerProfile, Task } from '../models'
+import type { CreatureDefinition, Interaction, PlayerProfile, Task } from '../models'
 
 export const DEFAULT_PROFILES: PlayerProfile[] = [
   { id: 'player-1', name: 'Sternchen' },
@@ -11,14 +11,12 @@ export const CREATURES: CreatureDefinition[] = [
     name: 'Mika',
     species: 'Wolkenfuchs',
     assetId: 'creature-mika',
-    price: 30,
   },
   {
     id: 'creature_02',
     name: 'Lumi',
     species: 'Sternendrache',
     assetId: 'creature-lumi',
-    price: 30,
   },
 ]
 
@@ -60,32 +58,5 @@ export const TASKS: Task[] = [
     title: 'Wäsche zusammenlegen',
     description: 'Lege die saubere Wäsche ordentlich zusammen.',
     reward: 5,
-  },
-]
-
-export const SHOP_ITEMS: Item[] = [
-  {
-    id: 'pink-cushion',
-    name: 'Sternenkissen',
-    description: 'Ein weiches Kissen für süße Träume.',
-    price: 12,
-    category: 'decor',
-    assetId: 'decor-cushion',
-  },
-  {
-    id: 'moon-lamp',
-    name: 'Mondlampe',
-    description: 'Sanftes Licht für gemütliche Abende.',
-    price: 18,
-    category: 'decor',
-    assetId: 'decor-lamp',
-  },
-  {
-    id: 'berry-snack',
-    name: 'Beeren-Snack',
-    description: 'Ein kleiner Energieschub für dein Wesen.',
-    price: 8,
-    category: 'care',
-    assetId: 'care-snack',
   },
 ]

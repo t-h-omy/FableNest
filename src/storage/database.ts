@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import { CREATURES, DEFAULT_PROFILES } from '../data/gameContent'
+import { SHOP_PRODUCTS } from '../data/shop'
 import { createCreature, createInitialGameState, GAME_STATE_VERSION } from '../game/gameLogic'
 import { approveTask } from '../game/tasks'
 import { createParentPin, verifyParentPin } from './parentPin'
@@ -8,10 +9,52 @@ import type { Creature, GameState, ParentPin, PlayerProfile, ProfileId } from '.
 const DATABASE_NAME = 'fabelnest'
 const DATABASE_VERSION = 2
 
-type PreviousGameState = Omit<GameState, 'taskRequests' | 'starBookings'>
+interface LegacyHouse {
+  level: number
+  decorItemIds: string[]
+}
 
-interface LegacyGameState extends Omit<PreviousGameState, 'creatures' | 'activeCreatureId'> {
+interface PreviousGameState extends Omit<GameState, 'house' | 'taskRequests' | 'starBookings'> {
+  house: LegacyHouse | GameState['house']
+  taskRequests?: GameState['taskRequests']
+  starBookings?: GameState['starBookings']
+}
+
+interface LegacyGameState extends Omit<PreviousGameState, 'creatures' | 'activeCreatureId' | 'house'> {
+  house: LegacyHouse
   creature: Pick<Creature, 'name' | 'species' | 'assetId' | 'happiness' | 'energy'> & { id: string }
+}
+
+// Preise der früheren Shop-Gegenstände, damit frühere Käufe als Sterne zurückerstattet werden.
+const LEGACY_ITEM_PRICES: Record<string, number> = { 'pink-cushion': 12, 'moon-lamp': 18, 'berry-snack': 8 }
+
+function isCurrentState(state: GameState | PreviousGameState | LegacyGameState): state is GameState {
+  return state.schemaVersion === GAME_STATE_VERSION && 'creatures' in state &&
+    'taskRequests' in state && 'starBookings' in state && 'placements' in state.house
+}
+
+type UpgradableState = Pick<GameState, 'coins' | 'ownedItemIds' | 'completedTaskIds'> & {
+  house: { level: number }
+  taskRequests?: GameState['taskRequests']
+  starBookings?: GameState['starBookings']
+}
+
+function upgradeToCurrent(old: UpgradableState, creatures: Creature[], activeCreatureId: GameState['activeCreatureId']): GameState {
+  const known = new Set(SHOP_PRODUCTS.map((product) => product.id))
+  const refund = old.ownedItemIds.reduce((sum, id) => sum + (known.has(id) ? 0 : LEGACY_ITEM_PRICES[id] ?? 0), 0)
+  const ownedItemIds = old.ownedItemIds.filter((id) => known.has(id))
+  if (creatures.length > 1 && !ownedItemIds.includes('second-creature')) ownedItemIds.push('second-creature')
+  return {
+    schemaVersion: GAME_STATE_VERSION,
+    coins: old.coins + refund,
+    creatures,
+    activeCreatureId,
+    house: { level: old.house.level, placements: {} },
+    ownedItemIds,
+    completedTaskIds: old.completedTaskIds,
+    taskRequests: old.taskRequests ?? [],
+    starBookings: old.starBookings ?? [],
+  }
 }
 
 interface FabelnestDatabase extends DBSchema {
@@ -79,7 +122,7 @@ export async function loadGameState(
   }
 
   if (savedState.schemaVersion !== GAME_STATE_VERSION) {
-    if (![0, 1, 2].includes(savedState.schemaVersion)) {
+    if (![0, 1, 2, 3].includes(savedState.schemaVersion)) {
       await transaction.done
       throw new Error('Der Spielstand hat eine nicht unterstützte Version.')
     }
@@ -99,16 +142,9 @@ export async function loadGameState(
         ...createCreature(definition), name: old.name,
         energy: old.energy, happiness: old.happiness,
       }
-      migratedState = {
-        schemaVersion: GAME_STATE_VERSION, coins: savedState.coins,
-        house: savedState.house, ownedItemIds: savedState.ownedItemIds,
-        completedTaskIds: savedState.completedTaskIds,
-        taskRequests: [],
-        starBookings: [],
-        creatures: [creature], activeCreatureId: creature.id,
-      }
+      migratedState = upgradeToCurrent(savedState, [creature], creature.id)
     } else {
-      migratedState = { ...savedState, schemaVersion: GAME_STATE_VERSION, taskRequests: [], starBookings: [] }
+      migratedState = upgradeToCurrent(savedState, savedState.creatures, savedState.activeCreatureId)
     }
     await transaction.store.put(migratedState, profileId)
     await transaction.done
@@ -116,7 +152,7 @@ export async function loadGameState(
   }
 
   await transaction.done
-  if (!('creatures' in savedState) || !('taskRequests' in savedState) || !('starBookings' in savedState)) {
+  if (!isCurrentState(savedState)) {
     throw new Error('Der Spielstand ist unvollständig.')
   }
   return savedState
@@ -162,8 +198,7 @@ export async function mutateGameState(
     await transaction.done
     throw new Error('Der Eltern-PIN wurde inzwischen geändert. Bitte versuche es erneut.')
   }
-  if (!stored || stored.schemaVersion !== GAME_STATE_VERSION ||
-    !('creatures' in stored) || !('taskRequests' in stored) || !('starBookings' in stored)) {
+  if (!stored || !isCurrentState(stored)) {
     await transaction.done
     throw new Error('Der Spielstand muss erneut geladen werden. Er wurde nicht überschrieben.')
   }

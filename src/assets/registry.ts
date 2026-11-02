@@ -10,9 +10,9 @@ export interface AnimationDefinition {
 
 export interface AssetDefinition {
   id: string
-  kind: 'creature' | 'decor' | 'care' | 'room'
+  kind: 'creature' | 'decor' | 'toy' | 'room'
   source:
-    | { type: 'generated'; color: string; shape: 'round-creature' | 'sparkle' }
+    | { type: 'generated'; color: string; shape: 'round-creature' | 'sparkle' | 'lamp' | 'ball' }
     | { type: 'image'; src: string }
     | {
       type: 'spritesheet'
@@ -37,20 +37,20 @@ export const ASSETS: Record<string, AssetDefinition> = {
     kind: 'room',
     source: { type: 'generated', color: '#ffe0ef', shape: 'sparkle' },
   },
-  'decor-cushion': {
-    id: 'generated-decor-cushion',
-    kind: 'decor',
-    source: { type: 'generated', color: '#f3a5cc', shape: 'sparkle' },
-  },
   'decor-lamp': {
     id: 'generated-decor-lamp',
     kind: 'decor',
-    source: { type: 'generated', color: '#eaa0c6', shape: 'sparkle' },
+    source: { type: 'generated', color: '#eaa0c6', shape: 'lamp' },
   },
-  'care-snack': {
-    id: 'generated-care-snack',
-    kind: 'care',
-    source: { type: 'generated', color: '#eb91b8', shape: 'sparkle' },
+  'toy-ball': {
+    id: 'generated-toy-ball',
+    kind: 'toy',
+    source: { type: 'generated', color: '#f08cbc', shape: 'ball' },
+  },
+  'product-creature': {
+    id: 'generated-product-creature',
+    kind: 'creature',
+    source: { type: 'generated', color: '#ef8fc1', shape: 'round-creature' },
   },
 }
 
