@@ -157,6 +157,8 @@ describe('persistent parent approval', () => {
       expect(migrated).toEqual({
         ...oldState, schemaVersion: GAME_STATE_VERSION, house: { level: 1, placements: {} },
         taskRequests: [], starBookings: [],
+        unlockedMinigameIds: ['interdimensional-pizza'], minigameHighscores: {},
+        pendingDelivery: null, lastDeliveryResult: null,
       })
       expect(await hasParentPin(database)).toBe(false)
       await setParentPin(database, '1234')

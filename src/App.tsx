@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { PixiCreature, type RoomObject } from './components/PixiCreature'
 import { ParentPinDialog } from './components/ParentPinDialog'
+import { PizzaDelivery } from './components/PizzaDelivery'
 import { placeholderColor } from './assets/registry'
-import { CREATURES, DEFAULT_PROFILES, TASKS } from './data/gameContent'
+import { CREATURES, DEFAULT_PROFILES, LEVEL_THRESHOLDS, TASKS } from './data/gameContent'
+import { FLIGHT, MINIGAMES, PIZZA_GAME_ID } from './data/minigames'
 import { findProduct, PLACEMENT_SLOTS, SHOP_PRODUCTS } from './data/shop'
-import { interact, renameCreature, selectCreature, XP_PER_LEVEL } from './game/gameLogic'
+import { interact, renameCreature, selectCreature } from './game/gameLogic'
+import { finishDelivery, isMinigameUnlocked, startDelivery } from './game/pizzaFlight'
+import { regenerateCreature } from './game/progression'
 import { checkPurchase, isPlaceable, placeItem, purchaseProduct, removeItem } from './game/shop'
 import { calendarDate, requestTask, taskStatus } from './game/tasks'
 import { confirmTask, ensureProfiles, loadGameState, mutateGameState, openGameDatabase } from './storage/database'
-import type { AnimationState, GameState, Interaction, PlayerProfile, ProfileId, SlotId } from './models'
+import type { AnimationState, Creature, FlightState, GameState, Interaction, PlayerProfile, ProfileId, SlotId } from './models'
 import type { CSSProperties } from 'react'
 
 type View = 'room' | 'tasks' | 'shop' | 'collection'
@@ -38,9 +42,11 @@ export default function App() {
   const [saving, setSaving] = useState(false)
   const [held, setHeld] = useState<string | null>(null)
   const savingRef = useRef(false)
+  const [now, setNow] = useState(Date.now)
+  const [delivery, setDelivery] = useState<{ runId: string; pilot: Creature } | null>(null)
 
   useEffect(() => {
-    const refresh = () => setToday(calendarDate())
+    const refresh = () => { setToday(calendarDate()); setNow(Date.now()) }
     const timer = window.setInterval(refresh, 1000)
     window.addEventListener('focus', refresh)
     return () => {
@@ -148,6 +154,46 @@ export default function App() {
     }
   }
 
+  function navigate(next: View) {
+    setDelivery(null)
+    setView(next)
+  }
+
+  async function launchDelivery() {
+    if (!database.current || !profileId || savingRef.current) return
+    const runId = crypto.randomUUID()
+    savingRef.current = true
+    setSaving(true)
+    try {
+      const next = await mutateGameState(database.current, profileId, (state) => startDelivery(state, runId, Date.now()))
+      if (currentProfile.current !== profileId) return
+      const pilot = next.creatures.find((entry) => entry.id === next.activeCreatureId)
+      if (!pilot) throw new Error('Der Pilot konnte nicht gefunden werden.')
+      stateRef.current = next
+      setGameState(next)
+      setDelivery({ runId, pilot })
+      setReaction({ state: 'idle', key: 0 })
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Der Flug konnte nicht gestartet werden.')
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
+
+  async function saveDeliveryResult(flight: FlightState) {
+    if (!database.current || !profileId || !delivery) throw new Error('Der Spielstand ist nicht verfügbar.')
+    const next = await mutateGameState(database.current, profileId,
+      (state) => finishDelivery(state, delivery.runId, flight, Date.now()))
+    if (!next.lastDeliveryResult) throw new Error('Das Ergebnis konnte nicht gebucht werden.')
+    if (currentProfile.current === profileId) {
+      stateRef.current = next
+      setGameState(next)
+    }
+    return next.lastDeliveryResult
+  }
+
   function tapSlot(slotId: SlotId) {
     const state = stateRef.current
     if (!state) return
@@ -240,12 +286,15 @@ export default function App() {
   }
 
   const activeProfile = profiles.find((profile) => profile.id === profileId)
-  const creature = gameState.creatures.find((entry) => entry.id === gameState.activeCreatureId)
+  const storedCreature = gameState.creatures.find((entry) => entry.id === gameState.activeCreatureId)
+  const creature = storedCreature ? regenerateCreature(storedCreature, now) : undefined
+  const levelStart = creature ? LEVEL_THRESHOLDS[creature.level - 1] : 0
+  const nextLevel = creature ? LEVEL_THRESHOLDS[creature.level] : undefined
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="#room" onClick={(event) => { event.preventDefault(); setView('room') }}>
+        <a className="wordmark" href="#room" onClick={(event) => { event.preventDefault(); navigate('room') }}>
           <span className="wordmark-icon" aria-hidden="true">✦</span>
           Fabelnest
         </a>
@@ -253,7 +302,7 @@ export default function App() {
           <span className="coin-badge" aria-label={`${gameState.coins} Sterne`} aria-live="polite">
             <span aria-hidden="true">✦</span> {gameState.coins}
           </span>
-          <button className="profile-switch" disabled={saving} onClick={() => { setProfileId(null); setGameState(null); setView('room') }}>
+          <button className="profile-switch" disabled={saving} onClick={() => { setProfileId(null); setGameState(null); navigate('room') }}>
             <span className="profile-dot" aria-hidden="true" />
             <span>{activeProfile?.name ?? 'Profil'}</span>
             <span className="switch-label"> wechseln</span>
@@ -266,7 +315,7 @@ export default function App() {
           <button
             key={item.id}
             className={`nav-item${view === item.id ? ' active' : ''}`}
-            onClick={() => setView(item.id)}
+            onClick={() => navigate(item.id)}
             aria-current={view === item.id ? 'page' : undefined}
           >
             {item.label}
@@ -299,7 +348,15 @@ export default function App() {
             </div>
           </section>
         )}
-        {creature && view === 'room' && (
+        {delivery && view === 'room' && (
+          <PizzaDelivery key={delivery.runId} pilot={delivery.pilot}
+            highscore={gameState.minigameHighscores[PIZZA_GAME_ID] ?? 0}
+            canRetry={Boolean(creature && creature.energy >= FLIGHT.energyCost)}
+            onFinish={saveDeliveryResult}
+            onRetry={() => void launchDelivery()}
+            onExit={() => setDelivery(null)} />
+        )}
+        {creature && !delivery && view === 'room' && (
           <section aria-labelledby="room-title">
             <div className="page-heading">
               <div>
@@ -329,7 +386,8 @@ export default function App() {
                 <span className="creature-species">{creature.species}</span>
                 <h2>{creature.name}</h2>
                 <p>Level {creature.level} / 20 · {creature.xp} XP</p>
-                <progress aria-label="Fortschritt zum nächsten Level" max={XP_PER_LEVEL} value={creature.level === 20 ? XP_PER_LEVEL : creature.xp % XP_PER_LEVEL} />
+                <progress aria-label="Fortschritt zum nächsten Level" max={nextLevel === undefined ? 1 : nextLevel - levelStart}
+                  value={nextLevel === undefined ? 1 : creature.xp - levelStart} />
                 <form key={creature.id} className="name-form" onSubmit={(event) => {
                   event.preventDefault()
                   const name = new FormData(event.currentTarget).get('creatureName')
@@ -370,6 +428,24 @@ export default function App() {
                     <p role="status" aria-live="polite">{message || 'XP haben pro Aktion und Wesen eine kurze Pause.'}</p>
                   </div>
                 </div>
+              </div>
+              <div className="minigame-launcher">
+                <h2>Minispiele</h2>
+                {MINIGAMES.map((game) => (
+                  <article key={game.id} className="content-card">
+                    <h3>{game.name}</h3>
+                    <p>{game.description}</p>
+                    <p>60 Sekunden Flug · 3 Leben · 20 Energie</p>
+                    <p>Dein Highscore: {gameState.minigameHighscores[game.id] ?? 0}</p>
+                    <p>Heute: {creature.deliveryXpDates[today] ?? 0} / 3 XP-Lieferungen mit {creature.name}.</p>
+                    <button className="button-primary"
+                      disabled={!isMinigameUnlocked(gameState, game.id) || creature.energy < FLIGHT.energyCost}
+                      onClick={() => void launchDelivery()}>
+                      {!isMinigameUnlocked(gameState, game.id) ? 'Noch gesperrt' : creature.energy < FLIGHT.energyCost ? 'Zu wenig Energie' : 'Pizza ausliefern (−20 Energie)'}
+                    </button>
+                  </article>
+                ))}
+                <p>Energie: {creature.energy} / 100. Pro Minute kommt 1 Energie zurück – auch bei geschlossener App.</p>
               </div>
               <div className="housing-panel">
                 <h2>Einrichtung</h2>

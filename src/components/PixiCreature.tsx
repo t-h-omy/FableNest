@@ -62,7 +62,7 @@ export function PixiCreature(props: PixiCreatureProps) {
           .roundRect(50, 40, 100, 110, 12).fill('#fff0f8')
           .ellipse(320, 320, 110, 20).fill('#df97bc')
         app.stage.addChild(room)
-        latest.current.objects.forEach((entry) => {
+        const objects = latest.current.objects.map((entry) => {
           const object = new ObjectRenderer(entry.assetId, entry.label, entry.interactive)
           object.position.set(entry.x, entry.y)
           if (entry.interactive) {
@@ -73,6 +73,7 @@ export function PixiCreature(props: PixiCreatureProps) {
           }
           app.stage.addChild(object)
           void object.load()
+          return object
         })
 
         const creature = new CreatureRenderer(props.assetId)
@@ -109,7 +110,10 @@ export function PixiCreature(props: PixiCreatureProps) {
         }
         creature.on('pointerupoutside', cancel)
         creature.on('pointercancel', cancel)
-        app.ticker.add((ticker) => creature.update(ticker.deltaMS))
+        app.ticker.add((ticker) => {
+          creature.update(ticker.deltaMS)
+          objects.forEach((object) => object.update(ticker))
+        })
         await creature.load()
       } catch (cause) {
         console.error('Das Spielzimmer konnte nicht gezeichnet werden.', cause)

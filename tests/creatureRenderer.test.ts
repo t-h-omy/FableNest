@@ -3,6 +3,7 @@ import { AnimatedSprite, Assets, Spritesheet, Texture } from 'pixi.js'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ASSETS, type AssetDefinition } from '../src/assets/registry'
 import { CreatureRenderer } from '../src/rendering/CreatureRenderer'
+import { ObjectRenderer } from '../src/rendering/ObjectRenderer'
 import type { AnimationState } from '../src/models'
 
 const loadAsset = vi.hoisted(() => vi.fn<() => Promise<unknown>>())
@@ -12,7 +13,8 @@ vi.mock('pixi.js', async (importOriginal) => {
 })
 
 const original = ASSETS['creature-mika']
-const renderers: CreatureRenderer[] = []
+const originalCow = ASSETS['space-cow']
+const renderers: (CreatureRenderer | ObjectRenderer)[] = []
 
 beforeAll(() => {
   vi.stubGlobal('requestAnimationFrame', () => 1)
@@ -24,6 +26,7 @@ afterAll(() => vi.unstubAllGlobals())
 afterEach(() => {
   for (const renderer of renderers.splice(0)) renderer.destroy()
   ASSETS['creature-mika'] = original
+  ASSETS['space-cow'] = originalCow
   loadAsset.mockReset()
 })
 
@@ -63,6 +66,32 @@ describe('CreatureRenderer', () => {
       poses.add([body.x, body.y, body.rotation, body.scale.x, body.scale.y].join(','))
     }
     expect(poses.size).toBe(5)
+  })
+
+  describe('minigame object assets', () => {
+    it('replaces a placeholder with an idle spritesheet fitted to the same bounds, without a shared ticker', async () => {
+      ASSETS['space-cow'] = {
+        ...originalCow,
+        source: {
+          type: 'spritesheet', src: '/local/cow.json',
+          animations: { idle: { animation: 'fly', speed: 0.3, loop: true, scale: 2 } },
+        },
+      }
+      const sheet = new Spritesheet(Texture.EMPTY, { frames: {}, meta: { scale: 1 } })
+      sheet.animations = { fly: [Texture.EMPTY, Texture.EMPTY] }
+      loadAsset.mockResolvedValue(sheet)
+      const renderer = new ObjectRenderer('space-cow', 'Weltraumkuh', false, { width: 64, height: 42 })
+      renderers.push(renderer)
+      await renderer.load()
+      const sprite = renderer.children[0]
+      expect(sprite).toBeInstanceOf(AnimatedSprite)
+      if (!(sprite instanceof AnimatedSprite)) throw new Error('Expected object animation')
+      expect(sprite.autoUpdate).toBe(false)
+      expect(sprite.animationSpeed).toBe(0.3)
+      expect(sprite.width).toBe(42)
+      expect(sprite.height).toBe(42)
+      expect(renderer.children[1].visible).toBe(false)
+    })
   })
 
   it('loads named JSON animations and applies speed, looping, scale and anchor', async () => {

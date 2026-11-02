@@ -10,9 +10,9 @@ export interface AnimationDefinition {
 
 export interface AssetDefinition {
   id: string
-  kind: 'creature' | 'decor' | 'toy' | 'room'
+  kind: 'creature' | 'decor' | 'toy' | 'room' | 'minigame'
   source:
-    | { type: 'generated'; color: string; shape: 'round-creature' | 'sparkle' | 'lamp' | 'ball' }
+    | { type: 'generated'; color: string; shape: 'round-creature' | 'sparkle' | 'lamp' | 'ball' | 'plane' | 'cow' | 'toilet' | 'topping' | 'space' | 'pizza' | 'alien' }
     | { type: 'image'; src: string }
     | {
       type: 'spritesheet'
@@ -22,6 +22,13 @@ export interface AssetDefinition {
 }
 
 export const ASSETS: Record<string, AssetDefinition> = {
+  'pizza-plane': { id: 'pizza-plane', kind: 'minigame', source: { type: 'generated', color: '#ef8fc1', shape: 'plane' } },
+  'space-cow': { id: 'space-cow', kind: 'minigame', source: { type: 'generated', color: '#ef8fc1', shape: 'cow' } },
+  'space-toilet': { id: 'space-toilet', kind: 'minigame', source: { type: 'generated', color: '#ef8fc1', shape: 'toilet' } },
+  'pizza-topping': { id: 'pizza-topping', kind: 'minigame', source: { type: 'generated', color: '#ef8fc1', shape: 'topping' } },
+  'pizza-space': { id: 'pizza-space', kind: 'minigame', source: { type: 'generated', color: '#ffe0ef', shape: 'space' } },
+  'delivery-pizza': { id: 'delivery-pizza', kind: 'minigame', source: { type: 'generated', color: '#ef8fc1', shape: 'pizza' } },
+  'alien-customer': { id: 'alien-customer', kind: 'minigame', source: { type: 'generated', color: '#ef8fc1', shape: 'alien' } },
   'creature-mika': {
     id: 'generated-creature-mika',
     kind: 'creature',
