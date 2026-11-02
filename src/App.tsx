@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { PixiCreature } from './components/PixiCreature'
+import { ParentPinDialog } from './components/ParentPinDialog'
 import { placeholderColor } from './assets/registry'
 import { CREATURES, DEFAULT_PROFILES, SHOP_ITEMS, TASKS } from './data/gameContent'
-import { completeTask, interact, purchaseCreature, purchaseItem, renameCreature, selectCreature, XP_PER_LEVEL } from './game/gameLogic'
-import { ensureProfiles, loadGameState, openGameDatabase, saveGameState } from './storage/database'
+import { interact, purchaseCreature, purchaseItem, renameCreature, selectCreature, XP_PER_LEVEL } from './game/gameLogic'
+import { calendarDate, requestTask, taskStatus } from './game/tasks'
+import { confirmTask, ensureProfiles, loadGameState, mutateGameState, openGameDatabase } from './storage/database'
 import type { AnimationState, GameState, Interaction, PlayerProfile, ProfileId } from './models'
 import type { CSSProperties } from 'react'
 
@@ -29,6 +31,20 @@ export default function App() {
   currentProfile.current = profileId
   const [reaction, setReaction] = useState<{ state: AnimationState; key: number }>({ state: 'idle', key: 0 })
   const [message, setMessage] = useState('')
+  const [pinDialog, setPinDialog] = useState<{ taskId: string; date: string } | 'change' | null>(null)
+  const [today, setToday] = useState(() => calendarDate())
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+
+  useEffect(() => {
+    const refresh = () => setToday(calendarDate())
+    const timer = window.setInterval(refresh, 1000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [])
 
   useEffect(() => {
     setReaction({ state: 'idle', key: 0 })
@@ -98,21 +114,29 @@ export default function App() {
     }
   }, [profileId])
 
-  async function updateGameState(nextState: GameState) {
-    stateRef.current = nextState
-    setGameState(nextState)
-    if (!profileId || !database.current) return
+  async function updateGameState(change: (state: GameState) => GameState) {
+    if (!profileId || !database.current || savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
     try {
-      await saveGameState(database.current, profileId, nextState)
-      if (currentProfile.current === profileId) setError('')
-    } catch {
+      const nextState = await mutateGameState(database.current, profileId, change)
       if (currentProfile.current === profileId) {
-        setError('Änderungen konnten nicht gespeichert werden. Prüfe bitte den freien Speicherplatz.')
+        stateRef.current = nextState
+        setGameState(nextState)
+        setError('')
       }
+    } catch (cause) {
+      if (currentProfile.current === profileId) {
+        setError(cause instanceof Error ? cause.message : 'Änderungen konnten nicht gespeichert werden. Prüfe bitte den freien Speicherplatz.')
+      }
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
   function handleInteraction(action: Interaction) {
+    if (savingRef.current) return
     const state = stateRef.current
     if (!state) return
     const next = interact(state, action, Date.now())
@@ -128,7 +152,7 @@ export default function App() {
     }
     setReaction((previous) => ({ state: animations[action], key: previous.key + 1 }))
     setMessage(gained ? `Schön gemacht! +${gained} XP.` : 'Dein Wesen freut sich! Neue XP gibt es nach einer kurzen Pause.')
-    void updateGameState(next)
+    void updateGameState((latest) => interact(latest, action, Date.now()))
   }
 
   if (loading) {
@@ -194,10 +218,10 @@ export default function App() {
           Fabelnest
         </a>
         <div className="topbar-actions">
-          <span className="coin-badge" aria-label={`${gameState.coins} Sternentaler`}>
+          <span className="coin-badge" aria-label={`${gameState.coins} Sterne`} aria-live="polite">
             <span aria-hidden="true">✦</span> {gameState.coins}
           </span>
-          <button className="profile-switch" onClick={() => { setProfileId(null); setGameState(null); setView('room') }}>
+          <button className="profile-switch" disabled={saving} onClick={() => { setProfileId(null); setGameState(null); setView('room') }}>
             <span className="profile-dot" aria-hidden="true" />
             <span>{activeProfile?.name ?? 'Profil'}</span>
             <span className="switch-label"> wechseln</span>
@@ -218,9 +242,9 @@ export default function App() {
         ))}
       </nav>
 
-      <main className="page-content">
+      <main className="page-content" inert={saving} aria-busy={saving}>
         {error && <p className="error-message" role="alert">{error}</p>}
-        {!creature && (
+        {!creature && view === 'room' && (
           <section aria-labelledby="starter-title">
             <div className="page-heading">
               <div>
@@ -235,7 +259,7 @@ export default function App() {
                   <div className="collection-creature" style={{ '--creature-color': placeholderColor(entry.assetId) } as CSSProperties} aria-hidden="true"><span /></div>
                   <h2>{entry.name}</h2>
                   <p>{entry.species}</p>
-                  <button className="button-primary" onClick={() => void updateGameState(selectCreature(stateRef.current ?? gameState, entry.id))}>
+                  <button className="button-primary" onClick={() => void updateGameState((state) => selectCreature(state, entry.id))}>
                     {entry.name} kostenlos wählen
                   </button>
                 </article>
@@ -254,7 +278,10 @@ export default function App() {
             </div>
             <label className="creature-switch">
               Aktives Wesen
-              <select value={creature.id} onChange={(event) => void updateGameState(selectCreature(stateRef.current ?? gameState, event.target.value))}>
+              <select value={creature.id} onChange={(event) => {
+                const id = event.target.value
+                void updateGameState((state) => selectCreature(state, id))
+              }}>
                 {gameState.creatures.map((friend) => <option key={friend.id} value={friend.id}>{friend.name}</option>)}
               </select>
             </label>
@@ -273,7 +300,7 @@ export default function App() {
                 <form key={creature.id} className="name-form" onSubmit={(event) => {
                   event.preventDefault()
                   const name = new FormData(event.currentTarget).get('creatureName')
-                  if (typeof name === 'string') void updateGameState(renameCreature(stateRef.current ?? gameState, creature.id, name))
+                  if (typeof name === 'string') void updateGameState((state) => renameCreature(state, creature.id, name))
                 }}>
                   <label htmlFor="creature-name">Name deines Wesens</label>
                   <input id="creature-name" name="creatureName" defaultValue={creature.name} maxLength={24} required pattern=".*\S.*" />
@@ -320,18 +347,19 @@ export default function App() {
           </section>
         )}
 
-        {creature && view === 'tasks' && (
+        {view === 'tasks' && (
           <section aria-labelledby="tasks-title">
             <div className="page-heading">
               <div>
                 <p className="eyebrow">Kleine Schritte, große Hilfe</p>
                 <h1 id="tasks-title">Aufgaben</h1>
               </div>
-              <span className="level-chip">{gameState.completedTaskIds.length}/{TASKS.length} erledigt</span>
+              <span className="level-chip">{TASKS.filter((task) => taskStatus(gameState, task.id, today) === 'completed').length}/{TASKS.length} heute abgeschlossen</span>
             </div>
             <div className="card-list">
               {TASKS.map((task) => {
-                const completed = gameState.completedTaskIds.includes(task.id)
+                const status = taskStatus(gameState, task.id, today)
+                const completed = status === 'completed'
                 return (
                   <article className="content-card task-card" key={task.id}>
                     <span className={`task-check${completed ? ' done' : ''}`} aria-hidden="true">
@@ -340,15 +368,19 @@ export default function App() {
                     <div className="card-copy">
                       <h2>{task.title}</h2>
                       <p>{task.description}</p>
+                      <p className="task-status">{completed ? 'Heute abgeschlossen' : status === 'pending' ? 'Wartet auf Bestätigung' : 'Offen'}</p>
                     </div>
                     <div className="card-action">
-                      <span className="reward">✦ {task.reward}</span>
+                      <span className="reward">✦ {task.reward} {task.reward === 1 ? 'Stern' : 'Sterne'}</span>
                       <button
                         className={completed ? 'button-secondary' : 'button-primary'}
                         disabled={completed}
-                        onClick={() => void updateGameState(completeTask(stateRef.current ?? gameState, task.id))}
+                        onClick={() => {
+                          if (status === 'pending') setPinDialog({ taskId: task.id, date: today })
+                          else void updateGameState((state) => requestTask(state, task.id))
+                        }}
                       >
-                        {completed ? 'Erledigt' : 'Abholen'}
+                        {completed ? 'Abgeschlossen' : status === 'pending' ? 'Elternfreigabe' : 'Als erledigt melden'}
                       </button>
                     </div>
                   </article>
@@ -356,18 +388,31 @@ export default function App() {
               })}
             </div>
             <p className="gentle-reminder">Frag vorher eine erwachsene Person, welche Aufgaben heute passen.</p>
+            <p className="gentle-reminder">Sterne gibt es nach der Elternfreigabe, einmal pro Aufgabe und Kalendertag. Morgen sind alle Aufgaben wieder offen.</p>
+            <button className="button-secondary parent-settings" onClick={() => setPinDialog('change')}>Eltern-PIN verwalten</button>
+            {gameState.starBookings.length > 0 && (
+              <details className="booking-history">
+                <summary>Sternebuchungen ansehen</summary>
+                <ul>
+                  {gameState.starBookings.map((booking) => (
+                    <li key={`${booking.date}-${booking.taskId}`}>{booking.date} · {booking.taskTitle} · +{booking.amount} Sterne</li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </section>
         )}
 
-        {creature && view === 'shop' && (
+        {view === 'shop' && (
           <section aria-labelledby="shop-title">
             <div className="page-heading">
               <div>
                 <p className="eyebrow">Mach es dir gemütlich</p>
                 <h1 id="shop-title">Kleiner Nest-Shop</h1>
               </div>
-              <span className="level-chip">✦ {gameState.coins} Taler</span>
+              <span className="level-chip">✦ {gameState.coins} Sterne</span>
             </div>
+            {!creature && <p>Wähle zuerst im Spielzimmer dein kostenloses Startwesen. Danach kannst du hier einkaufen.</p>}
             <div className="shop-grid">
               {CREATURES.map((entry) => {
                 const owned = gameState.creatures.some((friend) => friend.id === entry.id)
@@ -379,8 +424,8 @@ export default function App() {
                       <p>{entry.species} · Ein neuer Freund mit eigenen Werten.</p>
                       <div className="shop-buy-row">
                         <span className="reward">✦ {entry.price}</span>
-                        <button className="button-primary" disabled={owned || gameState.coins < entry.price}
-                          onClick={() => void updateGameState(purchaseCreature(stateRef.current ?? gameState, entry.id))}>
+                        <button className="button-primary" disabled={!creature || owned || gameState.coins < entry.price}
+                          onClick={() => void updateGameState((state) => purchaseCreature(state, entry.id))}>
                           {owned ? 'Schon bei dir' : gameState.coins < entry.price ? 'Zu teuer' : 'Wesen kaufen'}
                         </button>
                       </div>
@@ -404,8 +449,8 @@ export default function App() {
                         <span className="reward">✦ {item.price}</span>
                         <button
                           className={owned ? 'button-secondary' : 'button-primary'}
-                          disabled={owned || !canAfford}
-                          onClick={() => void updateGameState(purchaseItem(stateRef.current ?? gameState, item))}
+                          disabled={!creature || owned || !canAfford}
+                          onClick={() => void updateGameState((state) => purchaseItem(state, item))}
                         >
                           {owned ? 'Gekauft' : canAfford ? 'Kaufen' : 'Zu teuer'}
                         </button>
@@ -418,7 +463,7 @@ export default function App() {
           </section>
         )}
 
-        {creature && view === 'collection' && (
+        {view === 'collection' && (
           <section aria-labelledby="collection-title">
             <div className="page-heading">
               <div>
@@ -429,7 +474,7 @@ export default function App() {
             </div>
             <div className="collection-grid">
               {CREATURES.map((entry) => {
-                const selected = creature.id === entry.id
+                const selected = creature?.id === entry.id
                 const owned = gameState.creatures.find((friend) => friend.id === entry.id)
                 return (
                   <article className={`content-card creature-card${selected ? ' selected' : ''}`} key={entry.id}>
@@ -444,7 +489,7 @@ export default function App() {
                     <button
                       className={selected ? 'button-secondary' : 'button-primary'}
                       disabled={selected || !owned}
-                      onClick={() => void updateGameState(selectCreature(stateRef.current ?? gameState, entry.id))}
+                      onClick={() => void updateGameState((state) => selectCreature(state, entry.id))}
                     >
                       {selected ? 'Im Spielzimmer' : owned ? 'Auswählen' : 'Gesperrt'}
                     </button>
@@ -455,6 +500,21 @@ export default function App() {
           </section>
         )}
       </main>
+      {pinDialog && database.current && (
+        <ParentPinDialog
+          database={database.current}
+          taskTitle={pinDialog === 'change' ? undefined : TASKS.find((task) => task.id === pinDialog.taskId)?.title}
+          onClose={() => setPinDialog(null)}
+          onConfirm={async (pin) => {
+            if (pinDialog === 'change' || !database.current) return
+            const next = await confirmTask(database.current, profileId, pinDialog.taskId, pinDialog.date, pin)
+            stateRef.current = next
+            setGameState(next)
+            setToday(calendarDate())
+            setError('')
+          }}
+        />
+      )}
       <footer className="app-footer">Ein liebevolles Zuhause für kleine Fantasiewesen.</footer>
     </div>
   )

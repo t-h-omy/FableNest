@@ -38,22 +38,28 @@ export const INTERACTIONS: Record<Interaction, {
 
 export const TASKS: Task[] = [
   {
+    id: 'clear-plates',
+    title: 'Teller abräumen',
+    description: 'Bring die benutzten Teller vom Tisch in die Küche.',
+    reward: 1,
+  },
+  {
+    id: 'empty-dishwasher',
+    title: 'Spülmaschine ausräumen',
+    description: 'Räume das saubere Geschirr an seinen Platz.',
+    reward: 3,
+  },
+  {
     id: 'tidy-room',
     title: 'Zimmer aufräumen',
     description: 'Mach es dir in deinem Zimmer wieder gemütlich.',
-    reward: 10,
+    reward: 5,
   },
   {
-    id: 'read-book',
-    title: 'Ein Kapitel lesen',
-    description: 'Tauche in eine spannende Geschichte ein.',
-    reward: 8,
-  },
-  {
-    id: 'water-plants',
-    title: 'Pflanzen gießen',
-    description: 'Hilf den Pflanzen, kräftig weiterzuwachsen.',
-    reward: 6,
+    id: 'fold-laundry',
+    title: 'Wäsche zusammenlegen',
+    description: 'Lege die saubere Wäsche ordentlich zusammen.',
+    reward: 5,
   },
 ]
 

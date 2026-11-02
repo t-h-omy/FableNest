@@ -1,7 +1,7 @@
-import { CREATURES, INTERACTIONS, TASKS } from '../data/gameContent'
+import { CREATURES, INTERACTIONS } from '../data/gameContent'
 import type { Creature, CreatureDefinition, GameState, Interaction, Item } from '../models'
 
-export const GAME_STATE_VERSION = 2
+export const GAME_STATE_VERSION = 3
 export const MAX_LEVEL = 20
 export const XP_PER_LEVEL = 100
 
@@ -18,28 +18,20 @@ export function createInitialGameState(creatureId?: string): GameState {
 
   return {
     schemaVersion: GAME_STATE_VERSION,
-    coins: 20,
+    coins: 0,
     creatures: definition ? [createCreature(definition)] : [],
     activeCreatureId: definition?.id ?? null,
     house: { level: 1, decorItemIds: [] },
     ownedItemIds: [],
     completedTaskIds: [],
-  }
-}
-
-export function completeTask(state: GameState, taskId: string): GameState {
-  const task = TASKS.find((entry) => entry.id === taskId)
-  if (!task || state.completedTaskIds.includes(taskId)) return state
-
-  return {
-    ...state,
-    coins: state.coins + task.reward,
-    completedTaskIds: [...state.completedTaskIds, taskId],
+    taskRequests: [],
+    starBookings: [],
   }
 }
 
 export function purchaseItem(state: GameState, item: Item): GameState {
-  if (state.ownedItemIds.includes(item.id) || state.coins < item.price) return state
+  if (!Number.isSafeInteger(item.price) || item.price < 0 ||
+    state.ownedItemIds.includes(item.id) || state.coins < item.price) return state
 
   const isDecoration = item.category === 'decor'
   return {

@@ -17,7 +17,7 @@ npm run dev
 The app is served locally by Vite. Select either profile to enter its game.
 
 Each profile first chooses `creature_01` (Mika) or `creature_02` (Lumi) for free.
-The other friend costs 30 Sternentaler in the shop. Acquired friends can be
+The other friend costs 30 stars in the shop. Acquired friends can be
 renamed (1–24 characters) and switched in the room or collection without losing
 their individual progress.
 
@@ -56,13 +56,41 @@ but does not grant XP or extend the cooldown. Every friend has its own cooldowns
 Each 100 total XP raises its level by one, up to level 20 (1900 XP).
 Levels never change its size or species; there is no evolution.
 
-Schema version 2 saves owned creatures, the active creature ID, names, XP,
+Schema version 3 saves owned creatures, the active creature ID, names, XP,
 levels, needs and XP timestamps in IndexedDB. Versions 0/1 are migrated in one
 transaction, preserving coins, tasks, decor, the existing name and care values.
 Legacy Mika maps to `creature_01`; Lumi and the former Pippin map to
 `creature_02` (preserving Pippin's individual name). The migrated creature is
 already owned and the other stays locked. Newer save versions are rejected
 on both load and write without being overwritten.
+
+## Household tasks and parent approval
+
+`TASKS` in `src/data/gameContent.ts` configures the four daily household tasks
+and their star rewards (1, 3, 5 and 5). New profiles start with zero stars.
+Reporting a task only creates a pending request; a parent must enter the local
+4–6 digit PIN for each approval. The first approval opens PIN setup, followed
+by a separate PIN entry to approve the task. “Eltern-PIN verwalten” sets or
+changes the device-wide PIN; changing it requires the previous PIN.
+
+The PIN is stored as a salted PBKDF2-SHA-256 hash in IndexedDB, never as plain
+text. There is no server, recovery service or remote validation. This is a
+local family approval aid, not protection against someone modifying browser
+storage or the device clock.
+
+Every confirmed task records its ID, title, local calendar date and amount
+in that profile's star ledger. Each task can earn stars once per profile and
+local calendar day, regardless of spending. Pending requests expire at local
+midnight and can be reported again. Stars pay for shop items and creatures;
+care XP is independent. Approval checks the PIN and updates the latest saved
+state in an atomic transaction, preventing double rewards across browser tabs.
+UI changes are shown as saved only after their IndexedDB transaction succeeds.
+
+IndexedDB database version 2 adds shared parent settings. Save schema version 3
+adds pending requests and star bookings. Versions 0–2 are migrated while
+preserving existing balances, creatures and legacy completed-task IDs. Old
+undated completions remain archival and do not block new daily requests or
+create fictional ledger entries. Unknown newer saves remain untouched.
 
 ## Importing a local creature spritesheet
 

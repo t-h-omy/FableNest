@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { CREATURES, INTERACTIONS, SHOP_ITEMS, TASKS } from '../src/data/gameContent'
+import { CREATURES, INTERACTIONS, SHOP_ITEMS } from '../src/data/gameContent'
 import type { Interaction } from '../src/models'
 import {
-  completeTask,
   createInitialGameState,
   purchaseItem,
   purchaseCreature,
@@ -14,17 +13,8 @@ import {
 } from '../src/game/gameLogic'
 
 describe('game rules', () => {
-  it('rewards a task once and ignores unknown tasks', () => {
-    const initial = createInitialGameState()
-    const completed = completeTask(initial, TASKS[0].id)
-
-    expect(completed.coins).toBe(initial.coins + TASKS[0].reward)
-    expect(completeTask(completed, TASKS[0].id)).toBe(completed)
-    expect(completeTask(initial, 'not-a-task')).toBe(initial)
-  })
-
   it('purchases an affordable item and rejects unaffordable or duplicate purchases', () => {
-    const initial = createInitialGameState()
+    const initial = { ...createInitialGameState(), coins: 20 }
     const item = SHOP_ITEMS[0]
     const purchased = purchaseItem(initial, item)
 
