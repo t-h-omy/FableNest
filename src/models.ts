@@ -27,6 +27,48 @@ export interface Creature {
   xp: number
   level: number
   lastXpAt: Partial<Record<Interaction, number>>
+  energyUpdatedAt: number
+  deliveryXpDates: Record<string, number>
+}
+
+export interface MinigameDefinition {
+  id: string
+  name: string
+  description: string
+  unlockedByDefault: boolean
+  shopPrice?: number
+}
+
+export type FlightLane = 0 | 1 | 2
+export type FlightEntityKind = 'cow' | 'toilet' | 'topping'
+
+export interface FlightEntity {
+  id: number
+  kind: FlightEntityKind
+  lane: FlightLane
+  distance: number
+  removed: boolean
+}
+
+export interface FlightState {
+  phase: 'countdown' | 'flying' | 'delivering' | 'won' | 'lost'
+  phaseTime: number
+  distance: number
+  lane: FlightLane
+  moveCooldown: number
+  lives: number
+  invulnerable: number
+  toppings: number
+  score: number
+  entities: FlightEntity[]
+}
+
+export interface DeliveryResult {
+  runId: string
+  success: boolean
+  toppings: number
+  score: number
+  xp: number
 }
 
 export type SlotId = 'floor-left' | 'floor-right' | 'wall-shelf'
@@ -88,4 +130,8 @@ export interface GameState {
   completedTaskIds: string[]
   taskRequests: TaskRequest[]
   starBookings: StarBooking[]
+  unlockedMinigameIds: string[]
+  minigameHighscores: Record<string, number>
+  pendingDelivery: { runId: string; creatureId: CreatureId } | null
+  lastDeliveryResult: DeliveryResult | null
 }

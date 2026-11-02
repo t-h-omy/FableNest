@@ -1,5 +1,8 @@
 import type { CreatureDefinition, Interaction, PlayerProfile, Task } from '../models'
 
+export const LEVEL_THRESHOLDS: readonly number[] = Array.from({ length: 20 }, (_, level) => level * 100)
+export const ENERGY_REGEN_MS = 60_000
+
 export const DEFAULT_PROFILES: PlayerProfile[] = [
   { id: 'player-1', name: 'Sternchen' },
   { id: 'player-2', name: 'Mondlicht' },

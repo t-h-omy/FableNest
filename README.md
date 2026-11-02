@@ -36,8 +36,57 @@ losing their individual progress; exactly one friend is always active.
 - Object graphics are pink generated placeholders with distinct shapes and
   labels, resolved through `src/assets/registry.ts` (`image` sources replace the
   placeholder without logic changes).
-- Save schema version 4: v3 and older saves are migrated; previous shop items
-  are refunded as stars.
+- Save schema version 5: v4 saves retain furniture, inventory, creatures and
+  task history. v3 and older saves also refund obsolete shop items as stars.
+
+## Interdimensionale Pizzalieferung
+
+Start the unlocked minigame in the game room with the active creature as the
+visible pilot. Each attempt costs 20 energy immediately, followed by a three-second
+countdown, a 60-second fixed-distance flight and a two-second pizza handover.
+Use the large up/down buttons or desktop arrow keys to change one of three lanes
+at a time. Avoid space cows and flying toilets; collect toppings for 10 score
+points each. Three collisions end the flight; a hit grants one second of immunity.
+The single configured course leaves two open lanes in every separated obstacle
+wave. The game pauses when the browser tab is hidden.
+
+A successful delivery gives the pilot 20 XP plus 2 per topping, capped at 40 XP.
+Only the first three successful deliveries per creature and local calendar day
+(using the arrival date) grant XP. Defeats give none. Further flights still count
+toward that profile's personal highscore, including collected points on defeats.
+Level 20 caps total XP; the result displays the amount actually added.
+Leaving a flight or reloading abandons it without XP or an energy refund.
+An interrupted flight is not resumed. Retrying an unsuccessful result save does
+not double-book XP. A newer flight or creature switch in another tab prevents an
+old flight from being booked against the wrong pilot.
+
+Every creature regenerates one energy per full minute, up to 100, including time
+with the app closed. Its timestamp is persisted; fractional minutes are retained
+during regeneration, and time above full energy cannot be banked. Regeneration
+uses the local device clock, as do daily household tasks.
+
+- `src/data/minigames.ts`: registry (ID, name, description, default unlock,
+  optional shop price), course distance/speed/spacing, timing, energy and XP rules.
+  Future purchases can be recorded in `unlockedMinigameIds`; there are no other
+  games or minigame shop products yet.
+- `src/data/gameContent.ts`: configurable cumulative `LEVEL_THRESHOLDS` for
+  levels 1–20 and the energy regeneration interval.
+- `src/game/pizzaFlight.ts`: renderer-independent countdown, delta-time movement,
+  rectangular collision detection with substeps, course, start and result rules.
+- `src/game/progression.ts`: shared XP/level and offline energy calculations.
+- `src/components/PizzaDelivery.tsx` and `src/rendering/PizzaFlightRenderer.ts`:
+  mobile UI and PixiJS scene. Unmounting removes keyboard/visibility listeners
+  and destroys the application, ticker and scene children; there are no game timers.
+- `src/assets/registry.ts`: all pink placeholders, including plane, existing
+  creature pilot, cows, toilets, topping, space, pizza and alien. `ObjectRenderer`
+  supports local PNG/WebP sources and spritesheets with an `idle` animation using
+  the same animation definition format as creatures. Replacing a registry source
+  does not alter game logic or hitboxes; object images fit their logical art bounds.
+
+Schema 5 adds per-creature energy timestamps and dated XP counters, per-profile
+unlocks/highscores, and a pending run plus the last booked result for atomic,
+idempotent completion. Migration initializes new fields without inventing offline
+energy or previous deliveries. Unknown newer saves remain untouched.
 
 ## Build and test
 
@@ -71,7 +120,8 @@ energy; only playing costs energy. Needs stay between 0 and 100.
 tap 2 XP / 10 s, pet 5 XP / 15 s, feed 8 XP / 30 s, sleep 6 XP / 60 s,
 play 10 XP / 20 s. Repeated care still changes needs during the XP cooldown,
 but does not grant XP or extend the cooldown. Every friend has its own cooldowns.
-Each 100 total XP raises its level by one, up to level 20 (1900 XP).
+By default, each 100 total XP raises its level by one, up to level 20 (1900 XP);
+the cumulative thresholds are configurable in `src/data/gameContent.ts`.
 Levels never change its size or species; there is no evolution.
 
 Schema version 3 saves owned creatures, the active creature ID, names, XP,

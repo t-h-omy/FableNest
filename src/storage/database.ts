@@ -3,6 +3,7 @@ import { CREATURES, DEFAULT_PROFILES } from '../data/gameContent'
 import { SHOP_PRODUCTS } from '../data/shop'
 import { createCreature, createInitialGameState, GAME_STATE_VERSION } from '../game/gameLogic'
 import { approveTask } from '../game/tasks'
+import { regenerateEnergy } from '../game/progression'
 import { createParentPin, verifyParentPin } from './parentPin'
 import type { Creature, GameState, ParentPin, PlayerProfile, ProfileId } from '../models'
 
@@ -14,7 +15,10 @@ interface LegacyHouse {
   decorItemIds: string[]
 }
 
-interface PreviousGameState extends Omit<GameState, 'house' | 'taskRequests' | 'starBookings'> {
+type PreviousCreature = Omit<Creature, 'energyUpdatedAt' | 'deliveryXpDates'> & Partial<Pick<Creature, 'energyUpdatedAt' | 'deliveryXpDates'>>
+
+interface PreviousGameState extends Omit<GameState, 'house' | 'creatures' | 'taskRequests' | 'starBookings' | 'unlockedMinigameIds' | 'minigameHighscores' | 'pendingDelivery' | 'lastDeliveryResult'> {
+  creatures: PreviousCreature[]
   house: LegacyHouse | GameState['house']
   taskRequests?: GameState['taskRequests']
   starBookings?: GameState['starBookings']
@@ -30,7 +34,10 @@ const LEGACY_ITEM_PRICES: Record<string, number> = { 'pink-cushion': 12, 'moon-l
 
 function isCurrentState(state: GameState | PreviousGameState | LegacyGameState): state is GameState {
   return state.schemaVersion === GAME_STATE_VERSION && 'creatures' in state &&
-    'taskRequests' in state && 'starBookings' in state && 'placements' in state.house
+    'taskRequests' in state && 'starBookings' in state && 'placements' in state.house &&
+    'minigameHighscores' in state && 'unlockedMinigameIds' in state &&
+    'pendingDelivery' in state && 'lastDeliveryResult' in state &&
+    state.creatures.every((creature) => 'energyUpdatedAt' in creature && 'deliveryXpDates' in creature)
 }
 
 type UpgradableState = Pick<GameState, 'coins' | 'ownedItemIds' | 'completedTaskIds'> & {
@@ -45,6 +52,7 @@ function upgradeToCurrent(old: UpgradableState, creatures: Creature[], activeCre
   const ownedItemIds = old.ownedItemIds.filter((id) => known.has(id))
   if (creatures.length > 1 && !ownedItemIds.includes('second-creature')) ownedItemIds.push('second-creature')
   return {
+    ...createInitialGameState(),
     schemaVersion: GAME_STATE_VERSION,
     coins: old.coins + refund,
     creatures,
@@ -122,7 +130,7 @@ export async function loadGameState(
   }
 
   if (savedState.schemaVersion !== GAME_STATE_VERSION) {
-    if (![0, 1, 2, 3].includes(savedState.schemaVersion)) {
+    if (![0, 1, 2, 3, 4].includes(savedState.schemaVersion)) {
       await transaction.done
       throw new Error('Der Spielstand hat eine nicht unterstützte Version.')
     }
@@ -144,18 +152,30 @@ export async function loadGameState(
       }
       migratedState = upgradeToCurrent(savedState, [creature], creature.id)
     } else {
-      migratedState = upgradeToCurrent(savedState, savedState.creatures, savedState.activeCreatureId)
+      const creatures = savedState.creatures.map((creature) => ({
+        ...creature, energyUpdatedAt: creature.energyUpdatedAt ?? Date.now(),
+        deliveryXpDates: creature.deliveryXpDates ?? {},
+      }))
+      migratedState = upgradeToCurrent(savedState, creatures, savedState.activeCreatureId)
+      if (savedState.schemaVersion === 4 && 'placements' in savedState.house) {
+        migratedState.house = savedState.house
+        migratedState.coins = savedState.coins
+        migratedState.ownedItemIds = savedState.ownedItemIds
+      }
     }
     await transaction.store.put(migratedState, profileId)
     await transaction.done
     return migratedState
   }
 
-  await transaction.done
   if (!isCurrentState(savedState)) {
+    await transaction.done
     throw new Error('Der Spielstand ist unvollständig.')
   }
-  return savedState
+  const refreshed = regenerateEnergy(savedState, Date.now())
+  await transaction.store.put(refreshed, profileId)
+  await transaction.done
+  return refreshed
 }
 
 export async function hasParentPin(database: IDBPDatabase<FabelnestDatabase>): Promise<boolean> {
@@ -204,7 +224,8 @@ export async function mutateGameState(
   }
   let next: GameState
   try {
-    next = approval ? approveTask(stored, approval.taskId, approval.date) : change(stored)
+    const refreshed = regenerateEnergy(stored, Date.now())
+    next = approval ? approveTask(refreshed, approval.taskId, approval.date) : change(refreshed)
   } catch (cause) {
     await transaction.done
     throw cause
