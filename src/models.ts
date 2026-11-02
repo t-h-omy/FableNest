@@ -51,6 +51,22 @@ export interface Task {
   reward: number
 }
 
+export interface TaskRequest {
+  taskId: string
+  date: string
+}
+
+export interface StarBooking extends TaskRequest {
+  taskTitle: string
+  amount: number
+}
+
+export interface ParentPin {
+  version: 1
+  salt: string
+  hash: string
+}
+
 export interface GameState {
   schemaVersion: number
   coins: number
@@ -59,4 +75,6 @@ export interface GameState {
   house: House
   ownedItemIds: string[]
   completedTaskIds: string[]
+  taskRequests: TaskRequest[]
+  starBookings: StarBooking[]
 }

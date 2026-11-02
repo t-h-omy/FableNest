@@ -1,12 +1,16 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import { CREATURES, DEFAULT_PROFILES } from '../data/gameContent'
 import { createCreature, createInitialGameState, GAME_STATE_VERSION } from '../game/gameLogic'
-import type { Creature, GameState, PlayerProfile, ProfileId } from '../models'
+import { approveTask } from '../game/tasks'
+import { createParentPin, verifyParentPin } from './parentPin'
+import type { Creature, GameState, ParentPin, PlayerProfile, ProfileId } from '../models'
 
 const DATABASE_NAME = 'fabelnest'
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 
-interface LegacyGameState extends Omit<GameState, 'creatures' | 'activeCreatureId'> {
+type PreviousGameState = Omit<GameState, 'taskRequests' | 'starBookings'>
+
+interface LegacyGameState extends Omit<PreviousGameState, 'creatures' | 'activeCreatureId'> {
   creature: Pick<Creature, 'name' | 'species' | 'assetId' | 'happiness' | 'energy'> & { id: string }
 }
 
@@ -17,7 +21,11 @@ interface FabelnestDatabase extends DBSchema {
   }
   gameStates: {
     key: ProfileId
-    value: GameState | LegacyGameState
+    value: GameState | PreviousGameState | LegacyGameState
+  }
+  settings: {
+    key: 'parentPin'
+    value: ParentPin
   }
 }
 
@@ -29,6 +37,9 @@ export function openGameDatabase(name = DATABASE_NAME): Promise<IDBPDatabase<Fab
       }
       if (!database.objectStoreNames.contains('gameStates')) {
         database.createObjectStore('gameStates')
+      }
+      if (!database.objectStoreNames.contains('settings')) {
+        database.createObjectStore('settings')
       }
     },
   })
@@ -68,7 +79,7 @@ export async function loadGameState(
   }
 
   if (savedState.schemaVersion !== GAME_STATE_VERSION) {
-    if (savedState.schemaVersion !== 0 && savedState.schemaVersion !== 1) {
+    if (![0, 1, 2].includes(savedState.schemaVersion)) {
       await transaction.done
       throw new Error('Der Spielstand hat eine nicht unterstützte Version.')
     }
@@ -92,10 +103,12 @@ export async function loadGameState(
         schemaVersion: GAME_STATE_VERSION, coins: savedState.coins,
         house: savedState.house, ownedItemIds: savedState.ownedItemIds,
         completedTaskIds: savedState.completedTaskIds,
+        taskRequests: [],
+        starBookings: [],
         creatures: [creature], activeCreatureId: creature.id,
       }
     } else {
-      migratedState = { ...savedState, schemaVersion: GAME_STATE_VERSION }
+      migratedState = { ...savedState, schemaVersion: GAME_STATE_VERSION, taskRequests: [], starBookings: [] }
     }
     await transaction.store.put(migratedState, profileId)
     await transaction.done
@@ -103,8 +116,77 @@ export async function loadGameState(
   }
 
   await transaction.done
-  if (!('creatures' in savedState)) throw new Error('Der Spielstand ist unvollständig.')
+  if (!('creatures' in savedState) || !('taskRequests' in savedState) || !('starBookings' in savedState)) {
+    throw new Error('Der Spielstand ist unvollständig.')
+  }
   return savedState
+}
+
+export async function hasParentPin(database: IDBPDatabase<FabelnestDatabase>): Promise<boolean> {
+  return (await database.get('settings', 'parentPin')) !== undefined
+}
+
+export async function setParentPin(
+  database: IDBPDatabase<FabelnestDatabase>,
+  pin: string,
+  previousPin?: string,
+): Promise<void> {
+  const previous = await database.get('settings', 'parentPin')
+  if (previous) await verifyParentPin(previousPin ?? '', previous)
+  const next = await createParentPin(pin)
+  const transaction = database.transaction('settings', 'readwrite')
+  const current = await transaction.store.get('parentPin')
+  if (current?.hash !== previous?.hash || current?.salt !== previous?.salt) {
+    await transaction.done
+    throw new Error('Der Eltern-PIN wurde inzwischen geändert. Bitte versuche es erneut.')
+  }
+  await transaction.store.put(next, 'parentPin')
+  await transaction.done
+}
+
+export async function mutateGameState(
+  database: IDBPDatabase<FabelnestDatabase>,
+  profileId: ProfileId,
+  change: (state: GameState) => GameState,
+  approval?: { pin: string; taskId: string; date: string },
+): Promise<GameState> {
+  const checkedPin = approval ? await database.get('settings', 'parentPin') : undefined
+  if (approval) {
+    if (!checkedPin) throw new Error('Bitte lege zuerst einen Eltern-PIN fest.')
+    await verifyParentPin(approval.pin, checkedPin)
+  }
+  const transaction = database.transaction(['gameStates', 'settings'], 'readwrite')
+  const stored = await transaction.objectStore('gameStates').get(profileId)
+  const currentPin = approval ? await transaction.objectStore('settings').get('parentPin') : undefined
+  if (approval && (currentPin?.hash !== checkedPin?.hash || currentPin?.salt !== checkedPin?.salt)) {
+    await transaction.done
+    throw new Error('Der Eltern-PIN wurde inzwischen geändert. Bitte versuche es erneut.')
+  }
+  if (!stored || stored.schemaVersion !== GAME_STATE_VERSION ||
+    !('creatures' in stored) || !('taskRequests' in stored) || !('starBookings' in stored)) {
+    await transaction.done
+    throw new Error('Der Spielstand muss erneut geladen werden. Er wurde nicht überschrieben.')
+  }
+  let next: GameState
+  try {
+    next = approval ? approveTask(stored, approval.taskId, approval.date) : change(stored)
+  } catch (cause) {
+    await transaction.done
+    throw cause
+  }
+  await transaction.objectStore('gameStates').put(next, profileId)
+  await transaction.done
+  return next
+}
+
+export async function confirmTask(
+  database: IDBPDatabase<FabelnestDatabase>,
+  profileId: ProfileId,
+  taskId: string,
+  date: string,
+  pin: string,
+): Promise<GameState> {
+  return mutateGameState(database, profileId, (state) => state, { pin, taskId, date })
 }
 
 export async function saveGameState(
