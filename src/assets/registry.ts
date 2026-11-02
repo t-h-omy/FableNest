@@ -1,10 +1,24 @@
-interface AssetDefinition {
+import type { AnimationState } from '../models'
+
+export interface AnimationDefinition {
+  animation: string
+  speed?: number
+  loop?: boolean
+  scale?: number
+  anchor?: { x: number; y: number }
+}
+
+export interface AssetDefinition {
   id: string
-  kind: 'creature' | 'decor' | 'care'
+  kind: 'creature' | 'decor' | 'care' | 'room'
   source:
     | { type: 'generated'; color: string; shape: 'round-creature' | 'sparkle' }
     | { type: 'image'; src: string }
-    | { type: 'spritesheet'; src: string; animation: string }
+    | {
+      type: 'spritesheet'
+      src: string
+      animations: Partial<Record<AnimationState, AnimationDefinition>>
+    }
 }
 
 export const ASSETS: Record<string, AssetDefinition> = {
@@ -18,10 +32,10 @@ export const ASSETS: Record<string, AssetDefinition> = {
     kind: 'creature',
     source: { type: 'generated', color: '#e995c3', shape: 'round-creature' },
   },
-  'creature-pippin': {
-    id: 'generated-creature-pippin',
-    kind: 'creature',
-    source: { type: 'generated', color: '#f2b0d1', shape: 'round-creature' },
+  'room-background': {
+    id: 'generated-room',
+    kind: 'room',
+    source: { type: 'generated', color: '#ffe0ef', shape: 'sparkle' },
   },
   'decor-cushion': {
     id: 'generated-decor-cushion',

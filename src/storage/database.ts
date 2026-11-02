@@ -1,10 +1,14 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import { DEFAULT_PROFILES } from '../data/gameContent'
-import { createInitialGameState, GAME_STATE_VERSION } from '../game/gameLogic'
-import type { GameState, PlayerProfile, ProfileId } from '../models'
+import { CREATURES, DEFAULT_PROFILES } from '../data/gameContent'
+import { createCreature, createInitialGameState, GAME_STATE_VERSION } from '../game/gameLogic'
+import type { Creature, GameState, PlayerProfile, ProfileId } from '../models'
 
 const DATABASE_NAME = 'fabelnest'
 const DATABASE_VERSION = 1
+
+interface LegacyGameState extends Omit<GameState, 'creatures' | 'activeCreatureId'> {
+  creature: Pick<Creature, 'name' | 'species' | 'assetId' | 'happiness' | 'energy'> & { id: string }
+}
 
 interface FabelnestDatabase extends DBSchema {
   profiles: {
@@ -13,7 +17,7 @@ interface FabelnestDatabase extends DBSchema {
   }
   gameStates: {
     key: ProfileId
-    value: GameState
+    value: GameState | LegacyGameState
   }
 }
 
@@ -49,23 +53,57 @@ export async function loadGameState(
   database: IDBPDatabase<FabelnestDatabase>,
   profileId: ProfileId,
 ): Promise<GameState> {
-  const savedState = await database.get('gameStates', profileId)
+  const transaction = database.transaction('gameStates', 'readwrite')
+  const savedState = await transaction.store.get(profileId)
   if (!savedState) {
     const newState = createInitialGameState()
-    await database.put('gameStates', newState, profileId)
+    await transaction.store.put(newState, profileId)
+    await transaction.done
     return newState
   }
 
   if (savedState.schemaVersion > GAME_STATE_VERSION) {
+    await transaction.done
     throw new Error('Dieser Spielstand wurde mit einer neueren Version erstellt.')
   }
 
   if (savedState.schemaVersion !== GAME_STATE_VERSION) {
-    const migratedState = { ...createInitialGameState(), ...savedState, schemaVersion: GAME_STATE_VERSION }
-    await database.put('gameStates', migratedState, profileId)
+    if (savedState.schemaVersion !== 0 && savedState.schemaVersion !== 1) {
+      await transaction.done
+      throw new Error('Der Spielstand hat eine nicht unterstützte Version.')
+    }
+    let migratedState: GameState
+    if ('creature' in savedState) {
+      const old = savedState.creature
+      const legacyIds: Record<string, string> = {
+        mika: 'creature_01', lumi: 'creature_02', pippin: 'creature_02',
+        creature_01: 'creature_01', creature_02: 'creature_02',
+      }
+      const definition = CREATURES.find((entry) => entry.id === legacyIds[old.id])
+      if (!definition) {
+        await transaction.done
+        throw new Error('Das gespeicherte Wesen ist unbekannt. Dein Spielstand bleibt unverändert.')
+      }
+      const creature = {
+        ...createCreature(definition), name: old.name,
+        energy: old.energy, happiness: old.happiness,
+      }
+      migratedState = {
+        schemaVersion: GAME_STATE_VERSION, coins: savedState.coins,
+        house: savedState.house, ownedItemIds: savedState.ownedItemIds,
+        completedTaskIds: savedState.completedTaskIds,
+        creatures: [creature], activeCreatureId: creature.id,
+      }
+    } else {
+      migratedState = { ...savedState, schemaVersion: GAME_STATE_VERSION }
+    }
+    await transaction.store.put(migratedState, profileId)
+    await transaction.done
     return migratedState
   }
 
+  await transaction.done
+  if (!('creatures' in savedState)) throw new Error('Der Spielstand ist unvollständig.')
   return savedState
 }
 
@@ -77,5 +115,12 @@ export async function saveGameState(
   if (state.schemaVersion !== GAME_STATE_VERSION) {
     throw new Error('Der Spielstand hat eine nicht unterstützte Version.')
   }
-  await database.put('gameStates', state, profileId)
+  const transaction = database.transaction('gameStates', 'readwrite')
+  const storedState = await transaction.store.get(profileId)
+  if (storedState && storedState.schemaVersion > GAME_STATE_VERSION) {
+    await transaction.done
+    throw new Error('Ein neuerer Spielstand darf nicht überschrieben werden.')
+  }
+  await transaction.store.put(state, profileId)
+  await transaction.done
 }

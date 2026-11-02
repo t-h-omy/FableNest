@@ -260,21 +260,88 @@ h2 {
   width: min(100%, 400px);
   min-height: 250px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   justify-self: center;
 }
 
 .pixi-canvas {
   display: block;
-  width: min(100%, 360px);
+  width: 100%;
   height: auto;
   overflow: visible;
 }
 
 .pixi-canvas-host {
   width: 100%;
+  min-width: 0;
+  touch-action: none;
+  cursor: pointer;
+  border-radius: 16px;
+}
+
+.pixi-canvas-host:focus-visible {
+  outline: 3px solid #6b438f;
+  outline-offset: 3px;
+}
+
+.creature-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.creature-switch select,
+.name-form input {
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid #cba4be;
+  border-radius: 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
+.name-form {
   display: grid;
-  place-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+}
+
+.name-form input {
+  width: 100%;
+}
+
+.care-actions {
+  z-index: 1;
+  grid-column: 1 / -1;
+  margin-top: 20px;
+  text-align: center;
+}
+
+.care-actions p {
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.care-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.care-buttons button,
+.creature-card button {
+  min-height: 44px;
+}
+
+.satiety {
+  background: #d79159;
 }
 
 .creature-fallback {
@@ -796,7 +863,7 @@ button:disabled {
 
   .room-panel {
     min-height: unset;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto auto auto;
     gap: 0;
     padding: 12px 20px 20px;
@@ -808,7 +875,7 @@ button:disabled {
   }
 
   .pixi-canvas {
-    width: min(100%, 320px);
+    width: 100%;
   }
 
   .creature-caption {

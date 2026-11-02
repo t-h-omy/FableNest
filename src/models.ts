@@ -5,13 +5,29 @@ export interface PlayerProfile {
   name: string
 }
 
+export type CreatureId = 'creature_01' | 'creature_02'
+export type AnimationState = 'idle' | 'happy' | 'eat' | 'sleep' | 'play'
+export type Interaction = 'pet' | 'tap' | 'feed' | 'sleep' | 'play'
+
+export interface CreatureDefinition {
+  id: CreatureId
+  name: string
+  species: string
+  assetId: string
+  price: number
+}
+
 export interface Creature {
-  id: string
+  id: CreatureId
   name: string
   species: string
   assetId: string
   happiness: number
   energy: number
+  satiety: number
+  xp: number
+  level: number
+  lastXpAt: Partial<Record<Interaction, number>>
 }
 
 export interface House {
@@ -38,7 +54,8 @@ export interface Task {
 export interface GameState {
   schemaVersion: number
   coins: number
-  creature: Creature
+  creatures: Creature[]
+  activeCreatureId: CreatureId | null
   house: House
   ownedItemIds: string[]
   completedTaskIds: string[]
