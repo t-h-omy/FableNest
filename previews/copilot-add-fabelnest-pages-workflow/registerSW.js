@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/FableNest/previews/copilot-add-fabelnest-pages-workflow/sw.js', { scope: '/FableNest/previews/copilot-add-fabelnest-pages-workflow/' })})}
