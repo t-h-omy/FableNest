@@ -14,9 +14,10 @@ export default defineConfig({
         short_name: 'Fabelnest',
         description: 'Ein gemütliches Zuhause für dein Fantasiewesen.',
         theme_color: '#fff7fb',
-        background_color: '#fff7fb',
+        background_color: '#fff0f8',
         display: 'standalone',
         start_url: '.',
+        lang: 'de',
         icons: [
           {
             src: 'icon.svg',
@@ -25,6 +26,10 @@ export default defineConfig({
             purpose: 'any maskable',
           },
         ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{css,html,ico,js,json,png,svg,webmanifest,webp,woff2}'],
+        navigateFallback: 'index.html',
       },
     }),
   ],
