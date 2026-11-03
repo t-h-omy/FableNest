@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/FableNest/previews/ui-nachtnest/sw.js', { scope: '/FableNest/previews/ui-nachtnest/' })})}
