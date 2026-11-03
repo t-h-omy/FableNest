@@ -29,9 +29,10 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
 ]
 
 export const PLACEMENT_SLOTS: PlacementSlot[] = [
-  { id: 'floor-left', label: 'Boden links', x: 105, y: 345 },
-  { id: 'floor-right', label: 'Boden rechts', x: 535, y: 345 },
-  { id: 'wall-shelf', label: 'Regal an der Wand', x: 480, y: 150 },
+  // Koordinaten im Zimmerraster aus src/data/room.ts (640 × 480). Bodenplätze bleiben über der Bedürfnis-Leiste.
+  { id: 'floor-left', label: 'Boden links', x: 104, y: 380 },
+  { id: 'floor-right', label: 'Boden rechts', x: 536, y: 380 },
+  { id: 'wall-shelf', label: 'Regal an der Wand', x: 480, y: 194 },
 ]
 
 export function findProduct(id: string): ShopProduct | undefined {

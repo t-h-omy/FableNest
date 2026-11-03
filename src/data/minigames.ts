@@ -5,6 +5,7 @@ export const PIZZA_GAME_ID = 'interdimensional-pizza'
 export const MINIGAMES: MinigameDefinition[] = [{
   id: PIZZA_GAME_ID,
   name: 'Interdimensionale Pizzalieferung',
+  shortName: 'Pizzalieferung',
   description: 'Fliege mit deinem Wesen durch den Weltraum und bring dem Alien seine Pizza!',
   unlockedByDefault: true,
 }]

@@ -34,6 +34,8 @@ export interface Creature {
 export interface MinigameDefinition {
   id: string
   name: string
+  /** Kurzer Name für kleine Karten. */
+  shortName?: string
   description: string
   unlockedByDefault: boolean
   shopPrice?: number

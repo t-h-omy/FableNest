@@ -1,0 +1,203 @@
+/*
+ * Fabelnest Design Tokens – „Nachtnest“
+ * Einzige Quelle für Farben, Typo, Abstände, Formen, Tiefe und Bewegung.
+ * Komponenten verwenden ausschließlich diese Variablen. Siehe docs/UI_UX_BIBLE.md.
+ */
+
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 700;
+  src: url('../assets/fonts/fredoka-latin-wght.woff2') format('woff2-variations'),
+    url('../assets/fonts/fredoka-latin-wght.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url('../assets/fonts/nunito-latin-wght.woff2') format('woff2-variations'),
+    url('../assets/fonts/nunito-latin-wght.woff2') format('woff2');
+}
+
+/* Animierbare Fortschrittswerte für Ringe (conic-gradient). */
+@property --p {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+:root {
+  /* ── Nacht: Hintergründe und dunkle Flächen ───────────────── */
+  --night-1000: #0b0920;
+  --night-900: #110e2b;
+  --night-800: #1a1640;
+  --night-700: #241f55;
+  --night-600: #2e2868;
+  --night-500: #3b3480;
+  --night-400: #554ca3;
+  --night-300: #8a83c9;
+
+  /* ── Pergament: helle Inhaltskarten ───────────────────────── */
+  --paper-50: #fffaf0;
+  --paper-100: #fbf1de;
+  --paper-200: #f1e2c4;
+  --paper-300: #e3cc9f;
+
+  /* ── Tinte: Text auf Pergament ────────────────────────────── */
+  --ink-900: #231c48;
+  --ink-700: #463d78;
+  --ink-500: #6f66a3;
+
+  /* ── Licht: Text auf Nacht ────────────────────────────────── */
+  --light-100: #fbf8ff;
+  --light-200: #e9e4ff;
+  --light-400: #b4acdf;
+
+  /* ── Sternengold: Belohnung, Währung, Hauptaktion ─────────── */
+  --gold-200: #fff0c2;
+  --gold-300: #ffe08a;
+  --gold-400: #ffd15c;
+  --gold-500: #ffc23d;
+  --gold-600: #e9a21c;
+  --gold-700: #8a5a00;
+  --gold-ink: #2b1a00;
+
+  /* ── Bedürfnis- und Aktionsfarben ─────────────────────────── */
+  --rose-300: #ffb8d0;
+  --rose-500: #ff8fb5;
+  --rose-700: #c43d6d;
+  --peach-300: #ffcf9f;
+  --peach-500: #ffad66;
+  --peach-700: #b0560f;
+  --sky-300: #a9e5ff;
+  --sky-500: #69d2ff;
+  --sky-700: #12709c;
+  --lilac-300: #d8cbff;
+  --lilac-500: #b9a2ff;
+  --lilac-700: #6a4bd6;
+  --mint-300: #a8f3d4;
+  --mint-500: #5ee6b0;
+  --mint-700: #0f7a56;
+
+  /* ── Status ───────────────────────────────────────────────── */
+  --amber-300: #ffd697;
+  --amber-500: #ffb547;
+  --amber-700: #9a5a00;
+  --coral-300: #ffb3ba;
+  --coral-500: #ff6f7d;
+  --coral-700: #c0324a;
+
+  /* ── Platzhalter-Kunst (aus der Asset-Registry, nicht fürs UI) ─ */
+  --placeholder-pink: #ef8fc1;
+  --placeholder-room: #ffe0ef;
+
+  /* ── Semantische Rollen ───────────────────────────────────── */
+  --bg: var(--night-900);
+  --surface: var(--night-700);
+  --surface-raised: var(--night-600);
+  --surface-glass: rgb(36 31 85 / 72%);
+  --line: rgb(255 255 255 / 10%);
+  --line-strong: rgb(255 255 255 / 18%);
+  --text: var(--light-200);
+  --text-strong: var(--light-100);
+  --text-muted: var(--light-400);
+  --card: var(--paper-50);
+  --card-inset: var(--paper-100);
+  --card-line: var(--paper-200);
+  --card-text: var(--ink-900);
+  --card-text-muted: var(--ink-500);
+  --accent: var(--gold-500);
+  --accent-ink: var(--gold-ink);
+  --focus: var(--sky-300);
+  --happiness: var(--rose-500);
+  --satiety: var(--peach-500);
+  --energy: var(--sky-500);
+  --xp: var(--lilac-500);
+  --star: var(--gold-500);
+  --play: var(--mint-500);
+  --success: var(--mint-500);
+  --warning: var(--amber-500);
+  --danger: var(--coral-500);
+
+  /* ── Typografie ───────────────────────────────────────────── */
+  --font-display: 'Fredoka', ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif;
+  --font-body: 'Nunito', ui-rounded, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --text-hero: clamp(2.25rem, 1.8rem + 2vw, 3rem);
+  --text-h1: clamp(1.75rem, 1.55rem + 1vw, 2.125rem);
+  --text-h2: 1.375rem;
+  --text-h3: 1.125rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-micro: 0.75rem;
+  --leading-tight: 1.15;
+  --leading-body: 1.45;
+  --weight-body: 600;
+  --weight-strong: 800;
+  --weight-display: 600;
+  --tracking-eyebrow: 0.08em;
+
+  /* ── Abstände (4er-Raster) ────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --gutter: var(--space-4);
+
+  /* ── Formen: „Kiesel“ ─────────────────────────────────────── */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-pill: 999px;
+
+  /* ── Tiefe ────────────────────────────────────────────────── */
+  --shadow-1: 0 2px 6px rgb(5 3 20 / 35%);
+  --shadow-2: 0 10px 28px rgb(5 3 20 / 45%);
+  --shadow-3: 0 22px 60px rgb(5 3 20 / 60%);
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 14%);
+  --card-highlight: inset 0 1px 0 rgb(255 255 255 / 90%);
+  --glow-gold: 0 0 0 4px rgb(255 194 61 / 22%), 0 0 26px rgb(255 194 61 / 45%);
+  --glow-mint: 0 0 0 4px rgb(94 230 176 / 20%), 0 0 22px rgb(94 230 176 / 40%);
+  --edge-gold: 0 4px 0 var(--gold-600);
+  --edge-paper: 0 4px 0 var(--paper-300);
+  --edge-night: 0 4px 0 var(--night-1000);
+
+  /* ── Größen ───────────────────────────────────────────────── */
+  --touch-min: 48px;
+  --touch-primary: 56px;
+  --touch-game: 72px;
+  --topbar-h: 60px;
+  --tabbar-h: 72px;
+  --rail-w: 96px;
+  --content-max: 760px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* ── Bewegung ─────────────────────────────────────────────── */
+  --dur-instant: 90ms;
+  --dur-fast: 160ms;
+  --dur-base: 260ms;
+  --dur-slow: 420ms;
+  --dur-epic: 900ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Ebenen ───────────────────────────────────────────────── */
+  --z-stage-hud: 5;
+  --z-chrome: 20;
+  --z-toast: 40;
+  --z-fx: 60;
+}
