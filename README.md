@@ -7,7 +7,7 @@ lokal erzeugte Platzhalter.
 
 ## Lokal starten und prüfen
 
-Voraussetzung ist Node.js 22.12 oder neuer.
+Voraussetzung ist Node.js 22.22.2 oder neuer.
 
 ```sh
 npm ci

@@ -19,51 +19,57 @@ describe('complete local gameplay loop', () => {
     const name = `fabelnest-integration-${Math.random()}`
     databaseNames.push(name)
     const database = await openGameDatabase(name)
-    const now = Date.now()
-    let state = await loadGameState(database, 'player-1')
+    try {
+      const now = Date.now()
+      let state = await loadGameState(database, 'player-1')
 
-    state = selectCreature(state, 'creature_01')
-    state = renameCreature(state, 'creature_01', 'Flocke')
-    state = interact(state, 'pet', now)
-    const delivery = startDelivery(state, 'integration-run', now)
-    const won = { ...createFlight(), phase: 'won' as const, toppings: 2, score: 20 }
-    state = finishDelivery(delivery, 'integration-run', won, now)
-    expect(state.creatures[0].xp).toBeGreaterThan(5)
+      state = selectCreature(state, 'creature_01')
+      state = renameCreature(state, 'creature_01', 'Flocke')
+      state = interact(state, 'pet', now)
+      const delivery = startDelivery(state, 'integration-run', now)
+      const won = { ...createFlight(), phase: 'won' as const, toppings: 2, score: 20 }
+      state = finishDelivery(delivery, 'integration-run', won, now)
+      expect(state.creatures[0].xp).toBeGreaterThan(5)
 
-    for (const day of [1, 2, 3]) {
-      const date = new Date(2026, 2, day, 12)
-      for (const task of TASKS.slice(0, 3)) {
-        state = requestTask(state, task.id, date)
-        state = approveTask(state, task.id, calendarDate(date), date)
+      for (const day of [1, 2, 3]) {
+        const date = new Date(2026, 2, day, 12)
+        for (const task of TASKS.slice(0, 3)) {
+          state = requestTask(state, task.id, date)
+          state = approveTask(state, task.id, calendarDate(date), date)
+        }
       }
+      expect(state.coins).toBe(27)
+
+      state = purchaseProduct(state, 'star-lamp')
+      state = purchaseProduct(state, 'second-creature')
+      state = selectCreature(state, 'creature_02')
+      expect(state.coins).toBe(2)
+      expect(state.creatures.map((creature) => creature.id)).toEqual(['creature_01', 'creature_02'])
+      expect(state.activeCreatureId).toBe('creature_02')
+
+      await saveGameState(database, 'player-1', state)
+    } finally {
+      database.close()
     }
-    expect(state.coins).toBe(27)
-
-    state = purchaseProduct(state, 'star-lamp')
-    state = purchaseProduct(state, 'second-creature')
-    state = selectCreature(state, 'creature_02')
-    expect(state.coins).toBe(2)
-    expect(state.creatures.map((creature) => creature.id)).toEqual(['creature_01', 'creature_02'])
-    expect(state.activeCreatureId).toBe('creature_02')
-
-    await saveGameState(database, 'player-1', state)
-    database.close()
 
     const reopened = await openGameDatabase(name)
-    const restored = await loadGameState(reopened, 'player-1')
-    const otherProfile = await loadGameState(reopened, 'player-2')
-    expect(restored).toMatchObject({
-      coins: 2,
-      activeCreatureId: 'creature_02',
-      ownedItemIds: ['star-lamp', 'second-creature'],
-      creatures: [
-        { id: 'creature_01', name: 'Flocke', xp: expect.any(Number) },
-        { id: 'creature_02', xp: 0 },
-      ],
-    })
-    expect(restored.starBookings).toHaveLength(9)
-    expect(otherProfile.coins).toBe(0)
-    expect(otherProfile.creatures).toEqual([])
-    reopened.close()
+    try {
+      const restored = await loadGameState(reopened, 'player-1')
+      const otherProfile = await loadGameState(reopened, 'player-2')
+      expect(restored).toMatchObject({
+        coins: 2,
+        activeCreatureId: 'creature_02',
+        ownedItemIds: ['star-lamp', 'second-creature'],
+        creatures: [
+          { id: 'creature_01', name: 'Flocke', xp: expect.any(Number) },
+          { id: 'creature_02', xp: 0 },
+        ],
+      })
+      expect(restored.starBookings).toHaveLength(9)
+      expect(otherProfile.coins).toBe(0)
+      expect(otherProfile.creatures).toEqual([])
+    } finally {
+      reopened.close()
+    }
   })
 })
