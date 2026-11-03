@@ -1,30 +1,51 @@
 import { useEffect, useRef, useState } from 'react'
-import { PixiCreature, type RoomObject } from './components/PixiCreature'
 import { ParentPinDialog } from './components/ParentPinDialog'
 import { PizzaDelivery } from './components/PizzaDelivery'
-import { placeholderColor } from './assets/registry'
-import { CREATURES, DEFAULT_PROFILES, LEVEL_THRESHOLDS, TASKS } from './data/gameContent'
-import { FLIGHT, MINIGAMES, PIZZA_GAME_ID } from './data/minigames'
-import { findProduct, PLACEMENT_SLOTS, SHOP_PRODUCTS } from './data/shop'
+import type { RoomObject } from './components/PixiCreature'
+import { DEFAULT_PROFILES, TASKS } from './data/gameContent'
+import { FLIGHT, PIZZA_GAME_ID } from './data/minigames'
+import { ROOM_LAYOUT } from './data/room'
+import { findProduct, PLACEMENT_SLOTS } from './data/shop'
 import { interact, renameCreature, selectCreature } from './game/gameLogic'
-import { finishDelivery, isMinigameUnlocked, startDelivery } from './game/pizzaFlight'
+import { affordableProductCount, lowNeeds, msUntilEnergy, taskSummary } from './game/insights'
+import { finishDelivery, startDelivery } from './game/pizzaFlight'
 import { regenerateCreature } from './game/progression'
-import { checkPurchase, isPlaceable, placeItem, purchaseProduct, removeItem } from './game/shop'
-import { calendarDate, requestTask, taskStatus } from './game/tasks'
+import { placeItem, purchaseProduct, removeItem } from './game/shop'
+import { calendarDate, requestTask } from './game/tasks'
+import { CollectionScreen } from './screens/CollectionScreen'
+import { CreatureSheet } from './screens/CreatureSheet'
+import { formatWait, NestScreen } from './screens/NestScreen'
+import { ProfileScreen, Splash } from './screens/ProfileScreen'
+import { ProductSheet, ShopScreen } from './screens/ShopScreen'
+import { StarterScreen } from './screens/StarterScreen'
+import { BookingHistorySheet, TasksScreen } from './screens/TasksScreen'
 import { confirmTask, ensureProfiles, loadGameState, mutateGameState, openGameDatabase } from './storage/database'
-import type { AnimationState, Creature, FlightState, GameState, Interaction, PlayerProfile, ProfileId, SlotId } from './models'
-import type { CSSProperties } from 'react'
+import { CreatureArt } from './ui/Art'
+import { TabBar, TopBar, type NavBadge, type View } from './ui/Chrome'
+import { FeedbackProvider, useFeedback, type BurstKind, type Point } from './ui/feedback'
+import { Icon } from './ui/Icon'
+import type { AnimationState, Creature, CreatureId, FlightState, GameState, Interaction, PlayerProfile, ProfileId, SlotId } from './models'
 
-type View = 'room' | 'tasks' | 'shop' | 'collection'
+type SheetState = { type: 'creature'; welcome?: boolean } | { type: 'product'; id: string } | { type: 'history' } | null
 
-const NAV_ITEMS: { id: View; label: string }[] = [
-  { id: 'room', label: 'Spielzimmer' },
-  { id: 'tasks', label: 'Aufgaben' },
-  { id: 'shop', label: 'Shop' },
-  { id: 'collection', label: 'Sammlung' },
-]
+const REACTIONS: Record<Interaction, AnimationState> = {
+  tap: 'happy', pet: 'happy', feed: 'eat', sleep: 'sleep', play: 'play',
+}
+const BURSTS: Record<Interaction, { kind: BurstKind; count: number }> = {
+  tap: { kind: 'sparkle', count: 6 }, pet: { kind: 'heart', count: 9 }, feed: { kind: 'crumb', count: 12 },
+  sleep: { kind: 'zzz', count: 3 }, play: { kind: 'play', count: 7 },
+}
 
 export default function App() {
+  return (
+    <FeedbackProvider>
+      <Game />
+    </FeedbackProvider>
+  )
+}
+
+function Game() {
+  const feedback = useFeedback()
   const database = useRef<Awaited<ReturnType<typeof openGameDatabase>> | null>(null)
   const [profiles, setProfiles] = useState<PlayerProfile[]>([])
   const [profileId, setProfileId] = useState<ProfileId | null>(null)
@@ -36,14 +57,19 @@ export default function App() {
   const currentProfile = useRef(profileId)
   currentProfile.current = profileId
   const [reaction, setReaction] = useState<{ state: AnimationState; key: number }>({ state: 'idle', key: 0 })
-  const [message, setMessage] = useState('')
+  const [srMessage, setSrMessage] = useState('')
   const [pinDialog, setPinDialog] = useState<{ taskId: string; date: string } | 'change' | null>(null)
   const [today, setToday] = useState(() => calendarDate())
   const [saving, setSaving] = useState(false)
   const [held, setHeld] = useState<string | null>(null)
+  const [decorating, setDecorating] = useState(false)
+  const [sheet, setSheet] = useState<SheetState>(null)
+  const [coachDone, setCoachDone] = useState(false)
   const savingRef = useRef(false)
   const [now, setNow] = useState(Date.now)
   const [delivery, setDelivery] = useState<{ runId: string; pilot: Creature } | null>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const levelMemory = useRef<{ key: string; level: number } | null>(null)
 
   useEffect(() => {
     const refresh = () => { setToday(calendarDate()); setNow(Date.now()) }
@@ -57,7 +83,7 @@ export default function App() {
 
   useEffect(() => {
     setReaction({ state: 'idle', key: 0 })
-    setMessage('')
+    setSrMessage('')
   }, [gameState?.activeCreatureId, profileId])
 
   useEffect(() => {
@@ -123,18 +149,29 @@ export default function App() {
     }
   }, [profileId])
 
-  const placeableOwned = SHOP_PRODUCTS.filter((product) =>
-    isPlaceable(product) && gameState?.ownedItemIds.includes(product.id))
-  const roomObjects: RoomObject[] = PLACEMENT_SLOTS.flatMap((slot) => {
-    const product = findProduct(gameState?.house.placements[slot.id] ?? '')
-    return product ? [{
-      productId: product.id, assetId: product.assetId, label: product.name,
-      x: slot.x, y: slot.y, interactive: Boolean(product.interaction),
-    }] : []
-  })
+  // Level-Aufstieg feiern, sobald das aktive Wesen ein neues Level erreicht.
+  const activeStored = gameState?.creatures.find((entry) => entry.id === gameState.activeCreatureId)
+  useEffect(() => {
+    if (!activeStored || !profileId) {
+      levelMemory.current = null
+      return
+    }
+    const key = `${profileId}:${activeStored.id}`
+    const previous = levelMemory.current
+    levelMemory.current = { key, level: activeStored.level }
+    if (previous?.key === key && activeStored.level > previous.level) {
+      feedback.celebrate({
+        eyebrow: 'Level-Aufstieg',
+        title: `Level ${activeStored.level}!`,
+        subtitle: activeStored.level >= 20 ? `${activeStored.name} hat das höchste Level erreicht.` : `${activeStored.name} ist gewachsen.`,
+        art: <CreatureArt assetId={activeStored.assetId} mood="happy" />,
+        tone: 'lilac',
+      })
+    }
+  }, [activeStored?.id, activeStored?.level, profileId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function updateGameState(change: (state: GameState) => GameState) {
-    if (!profileId || !database.current || savingRef.current) return
+  async function updateGameState(change: (state: GameState) => GameState): Promise<GameState | null> {
+    if (!profileId || !database.current || savingRef.current) return null
     savingRef.current = true
     setSaving(true)
     try {
@@ -143,11 +180,15 @@ export default function App() {
         stateRef.current = nextState
         setGameState(nextState)
         setError('')
+        return nextState
       }
+      return null
     } catch (cause) {
       if (currentProfile.current === profileId) {
         setError(cause instanceof Error ? cause.message : 'Änderungen konnten nicht gespeichert werden. Prüfe bitte den freien Speicherplatz.')
+        feedback.haptic('warn')
       }
+      return null
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -156,8 +197,29 @@ export default function App() {
 
   function navigate(next: View) {
     setDelivery(null)
+    setDecorating(false)
+    setHeld(null)
     setView(next)
+    window.scrollTo?.({ top: 0 })
   }
+
+  function switchProfile() {
+    setProfileId(null)
+    setGameState(null)
+    setSheet(null)
+    setDecorating(false)
+    setHeld(null)
+    setCoachDone(false)
+    navigate('room')
+  }
+
+  /** Bildschirmpunkt über dem Wesen im Spielzimmer, für Partikel und Zahlen. */
+  function stagePoint(x: number, y: number): Point | null {
+    const rect = stageRef.current?.getBoundingClientRect()
+    if (!rect) return null
+    return { x: rect.left + rect.width * x / ROOM_LAYOUT.width, y: rect.top + rect.height * y / ROOM_LAYOUT.height }
+  }
+  const creaturePoint = () => stagePoint(ROOM_LAYOUT.creature.x, ROOM_LAYOUT.creature.y - 40)
 
   async function launchDelivery() {
     if (!database.current || !profileId || savingRef.current) return
@@ -171,9 +233,12 @@ export default function App() {
       if (!pilot) throw new Error('Der Pilot konnte nicht gefunden werden.')
       stateRef.current = next
       setGameState(next)
+      setDecorating(false)
       setDelivery({ runId, pilot })
       setReaction({ state: 'idle', key: 0 })
       setError('')
+      feedback.haptic('tap')
+      window.scrollTo?.({ top: 0 })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Der Flug konnte nicht gestartet werden.')
     } finally {
@@ -191,20 +256,31 @@ export default function App() {
       stateRef.current = next
       setGameState(next)
     }
+    if (next.lastDeliveryResult.success) feedback.haptic('success')
     return next.lastDeliveryResult
   }
 
   function tapSlot(slotId: SlotId) {
     const state = stateRef.current
     if (!state) return
+    const slot = PLACEMENT_SLOTS.find((entry) => entry.id === slotId)
+    const point = slot ? stagePoint(slot.x, slot.y - 20) : null
     const placed = state.house.placements[slotId]
     if (held && state.ownedItemIds.includes(held)) {
       const productId = held
       setHeld(null)
-      void updateGameState((current) => placeItem(current, slotId, productId))
+      void updateGameState((current) => placeItem(current, slotId, productId)).then((next) => {
+        if (!next) return
+        feedback.burst('puff', point, 9)
+        feedback.haptic('tap')
+        setSrMessage(`${findProduct(productId)?.name} steht jetzt: ${slot?.label}.`)
+      })
     } else if (placed) {
       setHeld(placed)
-      void updateGameState((current) => removeItem(current, slotId))
+      feedback.haptic('tap')
+      void updateGameState((current) => removeItem(current, slotId)).then((next) => {
+        if (next) setSrMessage(`${findProduct(placed)?.name} aufgehoben. Tippe auf einen Platz.`)
+      })
     }
   }
 
@@ -213,416 +289,246 @@ export default function App() {
     if (interaction) handleInteraction(interaction)
   }
 
-  function handleInteraction(action: Interaction) {
+  function handleInteraction(action: Interaction, origin?: Element | null) {
     if (savingRef.current) return
     const state = stateRef.current
     if (!state) return
     const next = interact(state, action, Date.now())
     if (next === state) {
-      setMessage('Zum Spielen brauchst du mindestens 10 Energie. Schlafen hilft dir dabei.')
+      const text = 'Zum Spielen brauchst du mindestens 10 Energie. Schlafen hilft dir dabei.'
+      feedback.toast(text, 'warn', 'bolt')
+      feedback.haptic('warn')
+      setSrMessage(text)
+      if (origin instanceof HTMLElement) {
+        origin.classList.remove('is-denied')
+        void origin.offsetWidth
+        origin.classList.add('is-denied')
+      }
       return
     }
     const before = state.creatures.find((entry) => entry.id === state.activeCreatureId)
     const after = next.creatures.find((entry) => entry.id === next.activeCreatureId)
     const gained = (after?.xp ?? 0) - (before?.xp ?? 0)
-    const animations: Record<Interaction, AnimationState> = {
-      tap: 'happy', pet: 'happy', feed: 'eat', sleep: 'sleep', play: 'play',
-    }
-    setReaction((previous) => ({ state: animations[action], key: previous.key + 1 }))
-    setMessage(gained ? `Schön gemacht! +${gained} XP.` : 'Dein Wesen freut sich! Neue XP gibt es nach einer kurzen Pause.')
+    setReaction((previous) => ({ state: REACTIONS[action], key: previous.key + 1 }))
+    setCoachDone(true)
+    const point = creaturePoint()
+    feedback.burst(BURSTS[action].kind, point, BURSTS[action].count)
+    if (gained) feedback.floatText(`+${gained} XP`, point, 'xp')
+    else feedback.floatText('XP-Pause', point, 'muted')
+    feedback.haptic('tap')
+    setSrMessage(gained ? `Schön gemacht! +${gained} XP.` : 'Dein Wesen freut sich! Neue XP gibt es nach einer kurzen Pause.')
     void updateGameState((latest) => interact(latest, action, Date.now()))
   }
 
-  if (loading) {
-    return <main className="loading-screen" aria-live="polite">Dein Fabelnest wird vorbereitet …</main>
+  async function chooseStarter(id: CreatureId) {
+    const next = await updateGameState((state) => selectCreature(state, id))
+    const chosen = next?.creatures.find((entry) => entry.id === id)
+    if (!chosen) return
+    feedback.celebrate({
+      eyebrow: 'Willkommen im Nest',
+      title: `Hallo, ${chosen.name}!`,
+      subtitle: `Dein ${chosen.species} zieht bei dir ein. Gib ihm gleich einen Namen.`,
+      art: <CreatureArt assetId={chosen.assetId} mood="happy" />,
+      action: 'Namen geben',
+      onDone: () => setSheet({ type: 'creature', welcome: true }),
+    })
   }
+
+  async function activateCreature(id: CreatureId, announce = true) {
+    const next = await updateGameState((state) => selectCreature(state, id))
+    const friend = next?.creatures.find((entry) => entry.id === id)
+    if (friend && announce) feedback.toast(`${friend.name} ist jetzt im Spielzimmer.`, 'success', 'nest')
+    return friend
+  }
+
+  async function requestTaskDone(taskId: string, origin: Element) {
+    const next = await updateGameState((state) => requestTask(state, taskId))
+    if (!next) return
+    feedback.burst('sparkle', origin, 7)
+    feedback.haptic('tap')
+    feedback.toast('Gemeldet! Jetzt bestätigt eine erwachsene Person.', 'success', 'hourglass')
+  }
+
+  function celebrateApproval(taskId: string, state: GameState) {
+    const task = TASKS.find((entry) => entry.id === taskId)
+    if (!task) return
+    window.setTimeout(() => {
+      const tile = document.querySelector(`[data-task-id="${taskId}"] .task-tile`)
+      feedback.flyStars(tile, task.reward)
+      feedback.burst('star', tile, 8)
+      feedback.toast(`+${task.reward} ${task.reward === 1 ? 'Stern' : 'Sterne'} für „${task.title}“`, 'success', 'star')
+      const summary = taskSummary(state, calendarDate())
+      if (summary.completed === summary.total) {
+        window.setTimeout(() => feedback.celebrate({
+          eyebrow: 'Heute', title: 'Alle Aufgaben geschafft!',
+          subtitle: 'Danke für deine Hilfe. Morgen gibt es neue Sterne zu verdienen.', icon: 'star', tone: 'gold',
+        }), 900)
+      }
+    }, 120)
+  }
+
+  async function buyProduct(productId: string) {
+    const next = await updateGameState((state) => purchaseProduct(state, productId))
+    const ok = Boolean(next?.ownedItemIds.includes(productId))
+    if (ok) feedback.haptic('success')
+    return ok
+  }
+
+  async function meetNewCreature() {
+    const state = stateRef.current
+    const newest = state?.creatures[state.creatures.length - 1]
+    setSheet(null)
+    if (!newest) return
+    navigate('room')
+    const friend = await activateCreature(newest.id, false)
+    if (friend) {
+      feedback.celebrate({
+        eyebrow: 'Neuer Freund', title: `${friend.name} ist eingezogen!`,
+        subtitle: `Dein ${friend.species} hat eigene Bedürfnisse, Energie und XP.`,
+        art: <CreatureArt assetId={friend.assetId} mood="happy" />, tone: 'mint',
+      })
+    }
+  }
+
+  async function rename(creatureId: CreatureId, name: string) {
+    const next = await updateGameState((state) => renameCreature(state, creatureId, name))
+    const saved = next?.creatures.find((entry) => entry.id === creatureId)?.name === name.trim()
+    if (saved) {
+      feedback.toast(`Schöner Name: ${name.trim()}`, 'success', 'pencil')
+      feedback.burst('sparkle', document.querySelector('.nameplate'), 8)
+    } else if (next) {
+      feedback.toast('Der Name braucht 1 bis 24 Zeichen.', 'warn')
+    }
+    return saved
+  }
+
+  if (loading && !profileId) return <Splash text="Dein Fabelnest wird vorbereitet …" />
 
   if (!profileId) {
-    return (
-      <main className="profile-screen">
-        <div className="profile-intro">
-          <div className="brand-mark" aria-hidden="true">✦</div>
-          <p className="eyebrow">Dein kleines Abenteuer</p>
-          <h1>Willkommen im Fabelnest</h1>
-          <p>Wähle dein Profil und kümmere dich um ein magisches Wesen.</p>
-        </div>
-        {error && <p className="error-message" role="alert">{error}</p>}
-        <div className="profile-options" aria-label="Profil auswählen">
-          {(profiles.length ? profiles : DEFAULT_PROFILES).map((profile, index) => (
-            <button
-              className="profile-card"
-              key={profile.id}
-              onClick={() => setProfileId(profile.id)}
-            >
-              <span className={`profile-avatar profile-avatar-${index + 1}`} aria-hidden="true">
-                {index === 0 ? '✦' : '☾'}
-              </span>
-              <span>
-                <strong>{profile.name}</strong>
-                <span className="profile-caption">Eigenes Spielzimmer</span>
-              </span>
-              <span className="profile-arrow" aria-hidden="true">→</span>
-            </button>
-          ))}
-        </div>
-        <p className="privacy-note">Dein Spielstand bleibt auf diesem Gerät.</p>
-      </main>
-    )
+    return <ProfileScreen profiles={profiles.length ? profiles : DEFAULT_PROFILES} error={error}
+      onSelect={(id) => { setError(''); setProfileId(id) }} />
   }
 
-  if (loading) {
-    return <main className="loading-screen" aria-live="polite">Dein Spielzimmer wird geöffnet …</main>
-  }
+  if (loading) return <Splash text="Dein Spielzimmer wird geöffnet …" />
 
   if (!gameState) {
     return (
-      <main className="loading-screen">
-        <p className="error-message" role="alert">{error || 'Der Spielstand ist nicht verfügbar.'}</p>
-        <button className="button-primary" onClick={() => { setProfileId(null); setError('') }}>
+      <main className="splash">
+        <p className="banner banner-error" role="alert">{error || 'Der Spielstand ist nicht verfügbar.'}</p>
+        <button className="btn btn-primary btn-lg" onClick={() => { setProfileId(null); setError('') }}>
           Profil wechseln
         </button>
       </main>
     )
   }
 
+  const profileIndex = Math.max(0, profiles.findIndex((profile) => profile.id === profileId))
   const activeProfile = profiles.find((profile) => profile.id === profileId)
-  const storedCreature = gameState.creatures.find((entry) => entry.id === gameState.activeCreatureId)
-  const creature = storedCreature ? regenerateCreature(storedCreature, now) : undefined
-  const levelStart = creature ? LEVEL_THRESHOLDS[creature.level - 1] : 0
-  const nextLevel = creature ? LEVEL_THRESHOLDS[creature.level] : undefined
+  const creature = activeStored ? regenerateCreature(activeStored, now) : undefined
+  const roomObjects: RoomObject[] = PLACEMENT_SLOTS.flatMap((slot) => {
+    const product = findProduct(gameState.house.placements[slot.id] ?? '')
+    return product ? [{
+      productId: product.id, assetId: product.assetId, label: product.name,
+      x: slot.x, y: slot.y, interactive: Boolean(product.interaction),
+    }] : []
+  })
+  const tasks = taskSummary(gameState, today)
+  const affordable = affordableProductCount(gameState)
+  const badges: Partial<Record<View, NavBadge>> = {}
+  if (tasks.pending) badges.tasks = { count: tasks.pending, tone: 'amber', label: `${tasks.pending} warten auf Elternfreigabe` }
+  else if (tasks.open) badges.tasks = { count: tasks.open, tone: 'gold', label: `${tasks.open} offen` }
+  if (affordable && creature) badges.shop = { count: affordable, tone: 'gold', label: `${affordable} kaufbar` }
+  if (creature && lowNeeds(creature).length && view !== 'room') badges.room = { tone: 'amber', label: `${creature.name} braucht Pflege` }
+  const productSheet = sheet?.type === 'product' ? findProduct(sheet.id) : undefined
+  const focus = Boolean(delivery && view === 'room')
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="wordmark" href="#room" onClick={(event) => { event.preventDefault(); navigate('room') }}>
-          <span className="wordmark-icon" aria-hidden="true">✦</span>
-          Fabelnest
-        </a>
-        <div className="topbar-actions">
-          <span className="coin-badge" aria-label={`${gameState.coins} Sterne`} aria-live="polite">
-            <span aria-hidden="true">✦</span> {gameState.coins}
-          </span>
-          <button className="profile-switch" disabled={saving} onClick={() => { setProfileId(null); setGameState(null); navigate('room') }}>
-            <span className="profile-dot" aria-hidden="true" />
-            <span>{activeProfile?.name ?? 'Profil'}</span>
-            <span className="switch-label"> wechseln</span>
-          </button>
+    <div className={`app-shell${focus ? ' is-focus' : ''}`}>
+      {!focus && (
+        <TopBar profileName={activeProfile?.name ?? 'Profil'} profileIndex={profileIndex} coins={gameState.coins}
+          disabled={saving} onSwitchProfile={switchProfile} onOpenShop={() => navigate('shop')} />
+      )}
+      {!focus && <TabBar view={view} badges={badges} onNavigate={navigate} />}
+
+      <main className="page" inert={saving} aria-busy={saving}>
+        {error && (
+          <p className="banner banner-error" role="alert">
+            <Icon name="info" size={20} /> <span>{error}</span>
+            <button className="icon-btn icon-btn-sm" onClick={() => setError('')} aria-label="Hinweis schließen"><Icon name="close" size={18} /></button>
+          </p>
+        )}
+        <p className="sr-only" role="status" aria-live="polite">{srMessage}</p>
+
+        <div key={focus ? 'flight' : view} className="view-transition">
+          {!creature && view === 'room' && <StarterScreen onChoose={(id) => void chooseStarter(id)} />}
+
+          {focus && delivery && (
+            <PizzaDelivery key={delivery.runId} pilot={delivery.pilot}
+              highscore={gameState.minigameHighscores[PIZZA_GAME_ID] ?? 0}
+              canRetry={Boolean(creature && creature.energy >= FLIGHT.energyCost)}
+              retryHint={creature ? `Genug Energie ist ${formatWait(msUntilEnergy(creature, FLIGHT.energyCost, now))} da.` : undefined}
+              onFinish={saveDeliveryResult}
+              onRetry={() => void launchDelivery()}
+              onExit={() => setDelivery(null)} />
+          )}
+
+          {creature && !delivery && view === 'room' && (
+            <NestScreen
+              state={gameState} creature={creature} now={now} today={today}
+              reaction={reaction} roomObjects={roomObjects} stageRef={stageRef}
+              decorating={decorating} held={held} showCoach={!coachDone && creature.xp === 0}
+              onInteract={handleInteraction}
+              onObjectTap={tapObject}
+              onSelectCreature={(id) => void activateCreature(id)}
+              onOpenCreature={() => setSheet({ type: 'creature' })}
+              onLaunchDelivery={() => void launchDelivery()}
+              onDeliveryBlocked={(reason) => { feedback.toast(reason, 'warn', 'bolt'); feedback.haptic('warn') }}
+              onDecorate={(active) => {
+                setDecorating(active)
+                setHeld(null)
+                if (active) window.scrollTo?.({ top: 0, behavior: 'smooth' })
+              }}
+              onHold={setHeld}
+              onTapSlot={tapSlot}
+              onOpenShop={() => navigate('shop')}
+            />
+          )}
+
+          {view === 'tasks' && (
+            <TasksScreen state={gameState} today={today}
+              onRequest={(taskId, origin) => void requestTaskDone(taskId, origin)}
+              onApprove={(taskId) => setPinDialog({ taskId, date: today })}
+              onManagePin={() => setPinDialog('change')}
+              onShowHistory={() => setSheet({ type: 'history' })} />
+          )}
+
+          {view === 'shop' && (
+            <ShopScreen state={gameState} hasCreature={Boolean(creature)} onOpen={(id) => setSheet({ type: 'product', id })} />
+          )}
+
+          {view === 'collection' && (
+            <CollectionScreen state={gameState} activeId={creature?.id ?? null}
+              onActivate={(id) => void activateCreature(id)}
+              onOpenShopProduct={(id) => { navigate('shop'); setSheet({ type: 'product', id }) }} />
+          )}
         </div>
-      </header>
-
-      <nav className="main-nav" aria-label="Hauptnavigation">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            className={`nav-item${view === item.id ? ' active' : ''}`}
-            onClick={() => navigate(item.id)}
-            aria-current={view === item.id ? 'page' : undefined}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
-
-      <main className="page-content" inert={saving} aria-busy={saving}>
-        {error && <p className="error-message" role="alert">{error}</p>}
-        {!creature && view === 'room' && (
-          <section aria-labelledby="starter-title">
-            <div className="page-heading">
-              <div>
-                <p className="eyebrow">Euer Abenteuer beginnt</p>
-                <h1 id="starter-title">Wähle dein kostenloses Startwesen</h1>
-              </div>
-            </div>
-            <p>Beide können deine Freunde werden. Das zweite Wesen wartet später im Shop auf dich.</p>
-            <div className="collection-grid">
-              {CREATURES.map((entry) => (
-                <article className="content-card creature-card" key={entry.id}>
-                  <div className="collection-creature" style={{ '--creature-color': placeholderColor(entry.assetId) } as CSSProperties} aria-hidden="true"><span /></div>
-                  <h2>{entry.name}</h2>
-                  <p>{entry.species}</p>
-                  <button className="button-primary" onClick={() => void updateGameState((state) => selectCreature(state, entry.id))}>
-                    {entry.name} kostenlos wählen
-                  </button>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-        {delivery && view === 'room' && (
-          <PizzaDelivery key={delivery.runId} pilot={delivery.pilot}
-            highscore={gameState.minigameHighscores[PIZZA_GAME_ID] ?? 0}
-            canRetry={Boolean(creature && creature.energy >= FLIGHT.energyCost)}
-            onFinish={saveDeliveryResult}
-            onRetry={() => void launchDelivery()}
-            onExit={() => setDelivery(null)} />
-        )}
-        {creature && !delivery && view === 'room' && (
-          <section aria-labelledby="room-title">
-            <div className="page-heading">
-              <div>
-                <p className="eyebrow">Ein Ort nur für euch</p>
-                <h1 id="room-title">Dein Spielzimmer</h1>
-              </div>
-              <span className="level-chip">Nest · Stufe {gameState.house.level}</span>
-            </div>
-            <label className="creature-switch">
-              Aktives Wesen
-              <select value={creature.id} onChange={(event) => {
-                const id = event.target.value
-                void updateGameState((state) => selectCreature(state, id))
-              }}>
-                {gameState.creatures.map((friend) => <option key={friend.id} value={friend.id}>{friend.name}</option>)}
-              </select>
-            </label>
-            <div className="room-panel">
-              <PixiCreature
-                assetId={creature.assetId} name={creature.name} species={creature.species}
-                animation={reaction.state} animationKey={reaction.key}
-                objects={roomObjects}
-                onObjectTap={tapObject}
-                onInteract={handleInteraction}
-              />
-              <div className="creature-caption">
-                <span className="creature-species">{creature.species}</span>
-                <h2>{creature.name}</h2>
-                <p>Level {creature.level} / 20 · {creature.xp} XP</p>
-                <progress aria-label="Fortschritt zum nächsten Level" max={nextLevel === undefined ? 1 : nextLevel - levelStart}
-                  value={nextLevel === undefined ? 1 : creature.xp - levelStart} />
-                <form key={creature.id} className="name-form" onSubmit={(event) => {
-                  event.preventDefault()
-                  const name = new FormData(event.currentTarget).get('creatureName')
-                  if (typeof name === 'string') void updateGameState((state) => renameCreature(state, creature.id, name))
-                }}>
-                  <label htmlFor="creature-name">Name deines Wesens</label>
-                  <input id="creature-name" name="creatureName" defaultValue={creature.name} maxLength={24} required pattern=".*\S.*" />
-                  <button className="button-secondary" type="submit">Namen speichern</button>
-                </form>
-              </div>
-              <div className="creature-stats" aria-label="Wohlbefinden">
-                <div className="stat">
-                  <span>Fröhlichkeit</span>
-                  <div className="stat-track" role="meter" aria-label="Fröhlichkeit" aria-valuenow={creature.happiness} aria-valuemin={0} aria-valuemax={100}>
-                    <span className="stat-fill happiness" style={{ width: `${creature.happiness}%` }} />
-                  </div>
-                </div>
-                <div className="stat">
-                  <span>Sättigung</span>
-                  <div className="stat-track" role="meter" aria-label="Sättigung" aria-valuenow={creature.satiety} aria-valuemin={0} aria-valuemax={100}>
-                    <span className="stat-fill satiety" style={{ width: `${creature.satiety}%` }} />
-                  </div>
-                </div>
-                <div className="stat">
-                  <span>Energie</span>
-                  <div className="stat-track" role="meter" aria-label="Energie" aria-valuenow={creature.energy} aria-valuemin={0} aria-valuemax={100}>
-                    <span className="stat-fill energy" style={{ width: `${creature.energy}%` }} />
-                  </div>
-                  <div className="care-actions">
-                    <p>Tippe dein Wesen an oder streichle es mit einer Wischbewegung.</p>
-                    <div className="care-buttons">
-                      <button className="button-primary" onClick={() => handleInteraction('pet')}>Streicheln</button>
-                      <button className="button-primary" onClick={() => handleInteraction('feed')}>Füttern</button>
-                      <button className="button-primary" onClick={() => handleInteraction('sleep')}>Schlafen</button>
-                      <button className="button-secondary" disabled={creature.energy < 10} onClick={() => handleInteraction('play')}>Spielen (−10 Energie)</button>
-                    </div>
-                    <p>Pflege geht auch ohne Energie. Spielen braucht mindestens 10 Energie.</p>
-                    <p role="status" aria-live="polite">{message || 'XP haben pro Aktion und Wesen eine kurze Pause.'}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="minigame-launcher">
-                <h2>Minispiele</h2>
-                {MINIGAMES.map((game) => (
-                  <article key={game.id} className="content-card">
-                    <h3>{game.name}</h3>
-                    <p>{game.description}</p>
-                    <p>60 Sekunden Flug · 3 Leben · 20 Energie</p>
-                    <p>Dein Highscore: {gameState.minigameHighscores[game.id] ?? 0}</p>
-                    <p>Heute: {creature.deliveryXpDates[today] ?? 0} / 3 XP-Lieferungen mit {creature.name}.</p>
-                    <button className="button-primary"
-                      disabled={!isMinigameUnlocked(gameState, game.id) || creature.energy < FLIGHT.energyCost}
-                      onClick={() => void launchDelivery()}>
-                      {!isMinigameUnlocked(gameState, game.id) ? 'Noch gesperrt' : creature.energy < FLIGHT.energyCost ? 'Zu wenig Energie' : 'Pizza ausliefern (−20 Energie)'}
-                    </button>
-                  </article>
-                ))}
-                <p>Energie: {creature.energy} / 100. Pro Minute kommt 1 Energie zurück – auch bei geschlossener App.</p>
-              </div>
-              <div className="housing-panel">
-                <h2>Einrichtung</h2>
-                <p>
-                  {held
-                    ? `${findProduct(held)?.name} ausgewählt. Tippe auf einen Platz, um es dort hinzustellen.`
-                    : 'Wähle einen Gegenstand und tippe dann auf einen Platz. Tippe auf einen belegten Platz, um den Gegenstand aufzuheben.'}
-                </p>
-                <div className="inventory-row">
-                  {placeableOwned.length === 0 && <p>Im Shop findest du Dinge für dein Zimmer.</p>}
-                  {placeableOwned.map((product) => (
-                    <button key={product.id} className={held === product.id ? 'button-primary' : 'button-secondary'}
-                      aria-pressed={held === product.id}
-                      onClick={() => setHeld(held === product.id ? null : product.id)}>
-                      {product.name}
-                    </button>
-                  ))}
-                </div>
-                <div className="slot-grid">
-                  {PLACEMENT_SLOTS.map((slot) => {
-                    const placed = findProduct(gameState.house.placements[slot.id] ?? '')
-                    return (
-                      <button key={slot.id} className={`slot-button${placed ? ' filled' : ''}`}
-                        disabled={!held && !placed} onClick={() => tapSlot(slot.id)}>
-                        <span className="item-category">{slot.label}</span>
-                        <strong>{placed?.name ?? 'Frei'}</strong>
-                      </button>
-                    )
-                  })}
-                </div>
-                {roomObjects.filter((entry) => entry.interactive).map((entry) => (
-                  <button key={entry.productId} className="button-secondary" onClick={() => tapObject(entry.productId)}>
-                    {entry.label} anstupsen
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {view === 'tasks' && (
-          <section aria-labelledby="tasks-title">
-            <div className="page-heading">
-              <div>
-                <p className="eyebrow">Kleine Schritte, große Hilfe</p>
-                <h1 id="tasks-title">Aufgaben</h1>
-              </div>
-              <span className="level-chip">{TASKS.filter((task) => taskStatus(gameState, task.id, today) === 'completed').length}/{TASKS.length} heute abgeschlossen</span>
-            </div>
-            <div className="card-list">
-              {TASKS.map((task) => {
-                const status = taskStatus(gameState, task.id, today)
-                const completed = status === 'completed'
-                return (
-                  <article className="content-card task-card" key={task.id}>
-                    <span className={`task-check${completed ? ' done' : ''}`} aria-hidden="true">
-                      {completed ? '✓' : '○'}
-                    </span>
-                    <div className="card-copy">
-                      <h2>{task.title}</h2>
-                      <p>{task.description}</p>
-                      <p className="task-status">{completed ? 'Heute abgeschlossen' : status === 'pending' ? 'Wartet auf Bestätigung' : 'Offen'}</p>
-                    </div>
-                    <div className="card-action">
-                      <span className="reward">✦ {task.reward} {task.reward === 1 ? 'Stern' : 'Sterne'}</span>
-                      <button
-                        className={completed ? 'button-secondary' : 'button-primary'}
-                        disabled={completed}
-                        onClick={() => {
-                          if (status === 'pending') setPinDialog({ taskId: task.id, date: today })
-                          else void updateGameState((state) => requestTask(state, task.id))
-                        }}
-                      >
-                        {completed ? 'Abgeschlossen' : status === 'pending' ? 'Elternfreigabe' : 'Als erledigt melden'}
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-            <p className="gentle-reminder">Frag vorher eine erwachsene Person, welche Aufgaben heute passen.</p>
-            <p className="gentle-reminder">Sterne gibt es nach der Elternfreigabe, einmal pro Aufgabe und Kalendertag. Morgen sind alle Aufgaben wieder offen.</p>
-            <button className="button-secondary parent-settings" onClick={() => setPinDialog('change')}>Eltern-PIN verwalten</button>
-            {gameState.starBookings.length > 0 && (
-              <details className="booking-history">
-                <summary>Sternebuchungen ansehen</summary>
-                <ul>
-                  {gameState.starBookings.map((booking) => (
-                    <li key={`${booking.date}-${booking.taskId}`}>{booking.date} · {booking.taskTitle} · +{booking.amount} Sterne</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </section>
-        )}
-
-        {view === 'shop' && (
-          <section aria-labelledby="shop-title">
-            <div className="page-heading">
-              <div>
-                <p className="eyebrow">Mach es dir gemütlich</p>
-                <h1 id="shop-title">Kleiner Nest-Shop</h1>
-              </div>
-              <span className="level-chip">✦ {gameState.coins} Sterne</span>
-            </div>
-            {!creature && <p>Wähle zuerst im Spielzimmer dein kostenloses Startwesen. Danach kannst du hier einkaufen.</p>}
-            <div className="shop-grid">
-              {SHOP_PRODUCTS.map((product) => {
-                const check = checkPurchase(gameState, product)
-                const owned = !check.ok && (check.reason === 'owned' || check.reason === 'no-creature')
-                return (
-                  <article className="content-card shop-card" key={product.id}>
-                    <div className="item-art" style={{ '--item-color': placeholderColor(product.assetId) } as CSSProperties} aria-hidden="true">
-                      <span>{product.kind === 'creature' ? '♥' : product.kind === 'toy' ? '●' : '✦'}</span>
-                    </div>
-                    <div className="shop-copy">
-                      <span className="item-category">
-                        {product.kind === 'creature' ? 'Neuer Freund' : product.kind === 'toy' ? 'Zum Spielen' : 'Für dein Zimmer'}
-                      </span>
-                      <h2>{product.name}</h2>
-                      <p>{product.description}</p>
-                      <div className="shop-buy-row">
-                        <span className="reward">✦ {product.price}</span>
-                        <button
-                          className={owned ? 'button-secondary' : 'button-primary'}
-                          disabled={!check.ok}
-                          onClick={() => void updateGameState((state) => purchaseProduct(state, product.id))}
-                        >
-                          {owned ? 'Gekauft' : check.ok ? 'Kaufen' : check.reason === 'poor' ? 'Zu wenig Sterne' : 'Wähle zuerst ein Wesen'}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          </section>
-        )}
-
-        {view === 'collection' && (
-          <section aria-labelledby="collection-title">
-            <div className="page-heading">
-              <div>
-                <p className="eyebrow">Lerne magische Freunde kennen</p>
-                <h1 id="collection-title">Wesen-Sammlung</h1>
-              </div>
-              <span className="level-chip">{gameState.creatures.length}/{CREATURES.length} Wesen</span>
-            </div>
-            <div className="collection-grid">
-              {CREATURES.map((entry) => {
-                const selected = creature?.id === entry.id
-                const owned = gameState.creatures.find((friend) => friend.id === entry.id)
-                return (
-                  <article className={`content-card creature-card${selected ? ' selected' : ''}`} key={entry.id}>
-                    <div className="collection-creature" style={{ '--creature-color': placeholderColor(entry.assetId) } as CSSProperties} aria-hidden="true">
-                      <span />
-                    </div>
-                    <div>
-                      <span className="item-category">{entry.species}</span>
-                      <h2>{owned?.name ?? entry.name}</h2>
-                      <p>{owned ? `Level ${owned.level} · ${owned.xp} XP` : 'Gesperrt · Im Shop für 20 Sterne erhältlich'}</p>
-                    </div>
-                    <button
-                      className={selected ? 'button-secondary' : 'button-primary'}
-                      disabled={selected || !owned}
-                      onClick={() => void updateGameState((state) => selectCreature(state, entry.id))}
-                    >
-                      {selected ? 'Im Spielzimmer' : owned ? 'Aktivieren' : 'Gesperrt'}
-                    </button>
-                    {!owned && <button className="button-secondary" onClick={() => setView('shop')}>Zum Shop</button>}
-                  </article>
-                )
-              })}
-            </div>
-          </section>
-        )}
       </main>
+
+      {sheet?.type === 'creature' && creature && (
+        <CreatureSheet key={creature.id} creature={creature} welcome={sheet.welcome}
+          onRename={(name) => rename(creature.id, name)} onClose={() => setSheet(null)} />
+      )}
+      {productSheet && (
+        <ProductSheet key={productSheet.id} product={productSheet} state={gameState}
+          onBuy={() => buyProduct(productSheet.id)}
+          onPlace={() => { setSheet(null); navigate('room'); setDecorating(true); setHeld(productSheet.id) }}
+          onMeet={() => void meetNewCreature()}
+          onEarn={() => { setSheet(null); navigate('tasks') }}
+          onChooseStarter={() => { setSheet(null); navigate('room') }}
+          onClose={() => setSheet(null)} />
+      )}
+      {sheet?.type === 'history' && <BookingHistorySheet bookings={gameState.starBookings} onClose={() => setSheet(null)} />}
+
       {pinDialog && database.current && (
         <ParentPinDialog
           database={database.current}
@@ -635,10 +541,10 @@ export default function App() {
             setGameState(next)
             setToday(calendarDate())
             setError('')
+            celebrateApproval(pinDialog.taskId, next)
           }}
         />
       )}
-      <footer className="app-footer">Ein liebevolles Zuhause für kleine Fantasiewesen.</footer>
     </div>
   )
 }

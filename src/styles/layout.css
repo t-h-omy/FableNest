@@ -1,0 +1,346 @@
+/* App-Rahmen: Topbar, Tabbar/Seitenleiste, Seitenfläche, Bildschirmköpfe, Breakpoints. */
+
+.app-shell {
+  min-height: 100dvh;
+}
+
+/* ── Topbar ────────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-chrome);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  height: calc(var(--topbar-h) + var(--safe-top));
+  padding: var(--safe-top) calc(var(--gutter) + var(--safe-right)) 0 calc(var(--gutter) + var(--safe-left));
+  background: linear-gradient(180deg, rgb(17 14 43 / 96%), rgb(17 14 43 / 78%));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--light-200);
+  letter-spacing: 0.01em;
+  opacity: 0.85;
+}
+
+.profile-chip {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  max-width: 100%;
+  padding: 4px var(--space-3) 4px 4px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 7%);
+  box-shadow: var(--highlight);
+  color: var(--light-100);
+  font-weight: var(--weight-strong);
+  transition: transform var(--dur-instant) var(--ease-out);
+}
+
+.profile-chip:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.profile-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-chip-swap {
+  color: var(--light-400);
+}
+
+.profile-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 18%), inset 0 2px 0 rgb(255 255 255 / 45%);
+}
+
+.profile-badge-sun {
+  background: radial-gradient(circle at 35% 30%, var(--gold-300), var(--gold-600));
+  color: var(--gold-ink);
+}
+
+.profile-badge-moon {
+  background: radial-gradient(circle at 35% 30%, var(--sky-300), #4a8fe0);
+  color: var(--ink-900);
+}
+
+.profile-badge-sm {
+  width: 34px;
+  height: 34px;
+}
+
+.profile-badge-md {
+  width: 44px;
+  height: 44px;
+}
+
+.profile-badge-lg {
+  width: 88px;
+  height: 88px;
+}
+
+.star-counter {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 4px var(--space-4) 4px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, rgb(255 194 61 / 22%), rgb(255 194 61 / 10%));
+  box-shadow: inset 0 0 0 1.5px rgb(255 209 92 / 55%), var(--highlight);
+  color: var(--gold-300);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.star-counter-icon {
+  color: var(--gold-500);
+  filter: drop-shadow(0 0 6px rgb(255 194 61 / 70%));
+}
+
+.star-counter.is-gain {
+  animation: counter-gain var(--dur-slow) var(--ease-spring);
+}
+
+.star-counter.is-spend {
+  animation: counter-spend var(--dur-slow) var(--ease-out);
+}
+
+.star-counter.is-landing .star-counter-icon {
+  animation: pop-in var(--dur-base) var(--ease-spring);
+}
+
+/* ── Tabbar ────────────────────────────────────────────────── */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-chrome);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(var(--tabbar-h) + var(--safe-bottom));
+  padding: var(--space-1) calc(var(--space-2) + var(--safe-right)) var(--safe-bottom) calc(var(--space-2) + var(--safe-left));
+  background: linear-gradient(0deg, rgb(11 9 32 / 98%), rgb(17 14 43 / 90%));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 -1px 0 var(--line), 0 -12px 30px rgb(5 3 20 / 45%);
+}
+
+.tab {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: none;
+  color: var(--light-400);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-strong);
+  transition: color var(--dur-fast);
+}
+
+.tab-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring);
+}
+
+.tab-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab.is-active {
+  color: var(--gold-300);
+}
+
+.tab.is-active .tab-icon {
+  background: rgb(255 194 61 / 16%);
+  box-shadow: inset 0 0 0 1px rgb(255 209 92 / 35%);
+  transform: translateY(-2px);
+}
+
+.tab:active .tab-icon {
+  transform: scale(0.9);
+}
+
+.tab-badge {
+  position: absolute;
+  top: -2px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  font-size: 0.6875rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--night-900);
+  animation: pop-in var(--dur-slow) var(--ease-spring);
+}
+
+.tab-badge:empty {
+  min-width: 12px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  top: 2px;
+  right: 12px;
+}
+
+.tab-badge-gold {
+  background: var(--gold-500);
+  color: var(--gold-ink);
+}
+
+.tab-badge-amber {
+  background: var(--amber-500);
+  color: var(--ink-900);
+  animation: pop-in var(--dur-slow) var(--ease-spring), soft-pulse 2.4s var(--ease-inout) 1s infinite;
+}
+
+/* ── Seitenfläche ──────────────────────────────────────────── */
+.page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-4) calc(var(--gutter) + var(--safe-right))
+    calc(var(--tabbar-h) + var(--safe-bottom) + var(--space-8)) calc(var(--gutter) + var(--safe-left));
+}
+
+.app-shell.is-focus .page {
+  max-width: 900px;
+  padding-top: calc(var(--safe-top) + var(--space-3));
+  padding-bottom: calc(var(--safe-bottom) + var(--space-6));
+}
+
+.view-transition {
+  animation: view-in var(--dur-slow) var(--ease-out) both;
+}
+
+.screen {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.screen-header {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.screen-header-row {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.screen-lead {
+  margin-top: var(--space-1);
+  color: var(--light-400);
+  font-size: 1.0625rem;
+}
+
+.sticky-cta {
+  position: sticky;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--space-3));
+  z-index: 2;
+  padding-top: var(--space-2);
+}
+
+/* ── Seitenleiste statt Tabbar: Querformat (Smartphone und Tablet) ─ */
+@media (orientation: landscape) and (max-height: 600px), (orientation: landscape) and (min-width: 900px) {
+  .app-shell:not(.is-focus) {
+    padding-left: calc(var(--rail-w) + var(--safe-left));
+  }
+
+  .tabbar {
+    top: 0;
+    right: auto;
+    width: calc(var(--rail-w) + var(--safe-left));
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-auto-rows: 84px;
+    align-content: center;
+    gap: var(--space-2);
+    padding: var(--safe-top) 0 var(--safe-bottom) var(--safe-left);
+    background: linear-gradient(90deg, rgb(11 9 32 / 98%), rgb(17 14 43 / 90%));
+    box-shadow: 1px 0 0 var(--line), 12px 0 30px rgb(5 3 20 / 35%);
+  }
+
+  .page {
+    padding-bottom: calc(var(--safe-bottom) + var(--space-8));
+  }
+
+  .toast-region {
+    bottom: calc(var(--safe-bottom) + var(--space-4));
+    left: calc(50% + var(--rail-w) / 2);
+  }
+
+  .sticky-cta {
+    bottom: calc(var(--safe-bottom) + var(--space-3));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  :root {
+    --topbar-h: 52px;
+  }
+
+  .tabbar {
+    grid-auto-rows: 64px;
+  }
+}
+
+@media (orientation: landscape) and (min-width: 900px) {
+  .app-shell:not(.is-focus) .page {
+    max-width: 1120px;
+  }
+
+  .screen:not(.nest) {
+    max-width: var(--content-max);
+    margin-inline: auto;
+  }
+}
+
+/* Schmale Smartphones: Wortmarke weicht Profil und Sternen. */
+@media (max-width: 380px) {
+  .topbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .wordmark,
+  .profile-chip-swap {
+    display: none;
+  }
+}

@@ -5,6 +5,10 @@ Fabelnest ist ein mobile-first Fantasy-Creature-Care-Spiel für Kinder von 8 bis
 lokale Profile, keine Konten und keinen Server. Spielgrafiken sind pinkfarbene,
 lokal erzeugte Platzhalter.
 
+Die Oberfläche folgt der UI/UX-Bible [`docs/UI_UX_BIBLE.md`](docs/UI_UX_BIBLE.md)
+(Art Direction „Nachtnest“, Design Tokens, Komponenten, Interaktions- und
+Feedbackregeln).
+
 ## Lokal starten und prüfen
 
 Voraussetzung ist Node.js 22.22.2 oder neuer.
@@ -20,12 +24,30 @@ Production-Build. `npm run preview` startet den fertigen Build lokal.
 ## Spielablauf
 
 Wähle eines der beiden Profile, nimm Mika oder Lumi als kostenloses Startwesen
-und gib ihm einen Namen. Im Spielzimmer kannst du es pflegen, XP verdienen und
+und gib ihm einen Namen. Im Spielzimmer kannst du es pflegen (antippen,
+streicheln, füttern, schlafen, spielen), XP verdienen, dein Zimmer einrichten und
 die freigeschaltete interdimensionale Pizzalieferung spielen. Melde Aufgaben;
 eine erwachsene Person bestätigt sie mit dem lokalen Eltern-PIN und vergibt
 Sterne. Sterne kaufst du für Dekoration, Spielzeug und das zweite Wesen. Jedes
 Wesen hat eigene Bedürfnisse, Energie und XP. Aufgaben, Sterne, Einrichtung,
 Inventar und Wesen gehören zum jeweiligen Profil.
+
+## Oberfläche und Architektur der UI
+
+- `src/styles/tokens.css` enthält alle Design Tokens; die übrigen Dateien in
+  `src/styles/` bauen darauf auf und werden über `src/styles.css` geladen.
+- `src/ui/` enthält wiederverwendbare Bausteine (Icons, SVG-Gegenstücke der
+  Platzhalter, Navigation, Sheets) und das Feedback-System `feedback.tsx`
+  (Toasts, Partikel, fliegende Sterne, Feiern, Haptik).
+- `src/screens/` enthält die Bildschirme; `src/App.tsx` hält Zustand,
+  Speicherabläufe und löst Feedback aus.
+- `src/game/insights.ts` liefert reine, getestete Ableitungen für Hinweise
+  (XP-Pausen, Energie-Wartezeit, Tageszusammenfassung, kaufbare Produkte).
+- Das Spielzimmer nutzt ein Raster von 640 × 480 (`src/data/room.ts`); die
+  Platzierungsplätze in `src/data/shop.ts` beziehen sich darauf.
+- Die Schriften Fredoka und Nunito liegen lokal unter `src/assets/fonts/`
+  (SIL Open Font License, Lizenztext liegt bei) und werden vom Service Worker
+  mitgecacht.
 
 ## GitHub-Pages-Deployment
 
@@ -47,8 +69,8 @@ Manifest, Assets und der automatisch registrierte Service Worker werden mit
 dem Vite-Basispfad gebaut. Der Service Worker cached den App-Shell-Build und
 statische Bild-, Skript-, CSS-, Manifest- und Schriftdateien für Offline-Starts.
 Nach dem ersten erfolgreichen Online-Aufruf ist die App installierbar; Icon und
-Startbildschirm verwenden das lokale pinkfarbene SVG-Icon und die pinke
-Manifest-Hintergrundfarbe.
+Startbildschirm verwenden das lokale SVG-Icon (Nachthimmel mit Mond und Wesen)
+und die nachtblaue Manifest-Hintergrundfarbe.
 
 ## Spielstandspeicherung
 

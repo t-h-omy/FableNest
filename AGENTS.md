@@ -15,6 +15,7 @@
 - IndexedDB-Zugriffe gehören nach `src/storage/`. Jede Änderung am gespeicherten Format muss versioniert und mit einer sicheren Migration versehen werden. Unbekannte neuere Speicherstände dürfen nicht überschrieben werden.
 - Spielgrafiken sind zunächst lokal programmatisch erzeugte pinkfarbene Platzhalter. Verwalte Assets über `src/assets/registry.ts`; spätere PNG/WebP- oder PixiJS-Spritesheet-Quellen sollen ohne Änderungen an der Spiellogik austauschbar sein.
 - Verwende CSS für die Oberfläche und füge keine UI-Komponentenbibliothek hinzu. Füge Abhängigkeiten nur hinzu, wenn die Produktanforderungen sie rechtfertigen.
+- Jede Änderung an Oberfläche, Interaktion oder Feedback folgt der UI/UX-Bible `docs/UI_UX_BIBLE.md`. Farben, Typo, Abstände, Radien und Bewegungen kommen ausschließlich aus `src/styles/tokens.css`. Neue Komponenten oder Regeln werden in der Bible ergänzt.
 - Keine Zugangsdaten, personenbezogene Daten, Werbe- oder Tracking-Funktionen hinzufügen. Speichere Spielstände ausschließlich lokal.
 
 ## Qualitätssicherung

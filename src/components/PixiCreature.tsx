@@ -1,6 +1,7 @@
 import { Application, Graphics, type FederatedPointerEvent } from 'pixi.js'
 import { useEffect, useRef, useState } from 'react'
 import { placeholderColor } from '../assets/registry'
+import { ROOM_LAYOUT } from '../data/room'
 import { CreatureRenderer } from '../rendering/CreatureRenderer'
 import { ObjectRenderer } from '../rendering/ObjectRenderer'
 import type { AnimationState, Interaction } from '../models'
@@ -42,7 +43,7 @@ export function PixiCreature(props: PixiCreatureProps) {
     async function start() {
       try {
         await app.init({
-          width: 640, height: 400, backgroundAlpha: 0, antialias: true,
+          width: ROOM_LAYOUT.width, height: ROOM_LAYOUT.height, backgroundAlpha: 0, antialias: true,
           autoDensity: false, resolution: Math.min(window.devicePixelRatio || 1, 2),
         })
         if (disposed || !hostRef.current) {
@@ -51,16 +52,22 @@ export function PixiCreature(props: PixiCreatureProps) {
         }
         initialized = true
         app.canvas.setAttribute('aria-hidden', 'true')
-        app.canvas.className = 'pixi-canvas'
+        app.canvas.className = 'pixi-canvas room-canvas'
         app.canvas.style.width = '100%'
         app.canvas.style.height = 'auto'
         hostRef.current.appendChild(app.canvas)
 
+        const { width, height, floorY, window: pane, shelf, creature: spot } = ROOM_LAYOUT
+        // Pinker Platzhalterraum: Wand, Boden, Fenster, Regal und Schatten unter dem Wesen.
         const room = new Graphics()
-          .roundRect(0, 0, 640, 400, 22).fill(placeholderColor('room-background'))
-          .rect(0, 295, 640, 105).fill('#f5b5d6')
-          .roundRect(50, 40, 100, 110, 12).fill('#fff0f8')
-          .ellipse(320, 320, 110, 20).fill('#df97bc')
+          .rect(0, 0, width, height).fill(placeholderColor('room-background'))
+          .rect(0, floorY, width, height - floorY).fill('#f5b5d6')
+          .rect(0, floorY, width, 6).fill('#ec9fc8')
+          .roundRect(pane.x, pane.y, pane.width, pane.height, 14).fill('#fff0f8')
+          .rect(pane.x + pane.width / 2 - 2, pane.y, 4, pane.height).fill('#f5c6de')
+          .rect(pane.x, pane.y + pane.height / 2 - 2, pane.width, 4).fill('#f5c6de')
+          .roundRect(shelf.x, shelf.y, shelf.width, 12, 6).fill('#df97bc')
+          .ellipse(spot.x, spot.y + 78 * spot.scale, 112, 20).fill('#df97bc')
         app.stage.addChild(room)
         const objects = latest.current.objects.map((entry) => {
           const object = new ObjectRenderer(entry.assetId, entry.label, entry.interactive)
@@ -77,7 +84,8 @@ export function PixiCreature(props: PixiCreatureProps) {
         })
 
         const creature = new CreatureRenderer(props.assetId)
-        creature.position.set(320, 230)
+        creature.position.set(spot.x, spot.y)
+        creature.scale.set(spot.scale)
         creature.setAnimation(latest.current.animation)
         rendererRef.current = creature
         app.stage.addChild(creature)
@@ -153,8 +161,8 @@ export function PixiCreature(props: PixiCreatureProps) {
           }
         }}
       />
-      {unavailable && <p role="status">Die Zimmeransicht ist nicht verfügbar. Du kannst die Pflegeknöpfe weiter nutzen.</p>}
       {unavailable && <div className="creature-fallback" style={{ backgroundColor: placeholderColor(props.assetId) }} aria-hidden="true" />}
+      {unavailable && <p className="stage-fallback-note" role="status">Die Zimmeransicht ist nicht verfügbar. Du kannst die Pflegeknöpfe weiter nutzen.</p>}
     </div>
   )
 }
