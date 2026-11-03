@@ -153,6 +153,8 @@ a {
 
 button {
   color: inherit;
+  min-height: 44px;
+  touch-action: manipulation;
 }
 
 button:focus-visible,
@@ -260,6 +262,7 @@ a:focus-visible {
 }
 
 .nav-item {
+  min-height: 44px;
   padding: 10px 17px;
   border: 0;
   border-radius: 100px;
@@ -623,7 +626,7 @@ h2 {
 
 .button-primary,
 .button-secondary {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 16px;
   border: 1px solid transparent;
   border-radius: 12px;
@@ -1113,7 +1116,7 @@ button:disabled {
 
   .button-primary,
   .button-secondary {
-    min-height: 36px;
+    min-height: 44px;
     padding: 0 11px;
     font-size: 11px;
   }
