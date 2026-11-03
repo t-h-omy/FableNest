@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/FableNest/previews/copilot-integration-pwa-qa/sw.js', { scope: '/FableNest/previews/copilot-integration-pwa-qa/' })})}
